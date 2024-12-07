@@ -1,199 +1,103 @@
-require("dotenv").config();
-const express = require("express");
-const multer = require("multer");
-const crypto = require("crypto");
-const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const fs = require("fs");
-const path = require("path");
+require('dotenv').config();
+const express = require('express');
+const multer = require('multer');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-const upload = multer({ dest: "uploads/" });
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
 
-// MongoDB Connection
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("Connected to MongoDB"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+const IV_LENGTH = 16;
 
-// MongoDB Schemas
-const userSchema = new mongoose.Schema({
-  email: { type: String, unique: true, required: true },
-  password: { type: String, required: true },
+// Storage for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
 });
+const upload = multer({ storage });
 
-const otpSchema = new mongoose.Schema({
-  email: String,
-  otp: String,
-  filePath: String,
-  iv: String,
-  createdAt: { type: Date, default: Date.now, expires: 300 }, // TTL: 5 mins
-});
+// Middleware for token verification
+const verifyToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
+  
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (error) {
+    res.status(403).json({ success: false, message: 'Invalid or expired token' });
+  }
+};
 
-const auditLogSchema = new mongoose.Schema({
-  action: String, // "upload" or "download"
-  userId: mongoose.Schema.Types.ObjectId,
-  fileName: String,
-  timestamp: { type: Date, default: Date.now },
-});
-
-const User = mongoose.model("User", userSchema);
-const OTP = mongoose.model("OTP", otpSchema);
-const AuditLog = mongoose.model("AuditLog", auditLogSchema);
-
-// AES-256 Encryption
-const ENCRYPTION_KEY = crypto.randomBytes(32); // 32 bytes for AES-256
-const IV_LENGTH = 16; // Initialization vector length
-
-function encryptFile(filePath) {
+// Encryption utility
+const encryptFile = (filePath) => {
   const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+  const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+
   const input = fs.createReadStream(filePath);
   const output = fs.createWriteStream(`${filePath}.enc`);
 
   input.pipe(cipher).pipe(output);
-  return { iv: iv.toString("hex"), encryptedFilePath: `${filePath}.enc` };
-}
+  return { encryptedFilePath: `${filePath}.enc`, iv: iv.toString('hex') };
+};
 
-function decryptFile(encryptedFilePath, iv) {
-  const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, Buffer.from(iv, "hex"));
+// Decryption utility
+const decryptFile = (encryptedFilePath, iv) => {
+  const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, Buffer.from(iv, 'hex'));
   const input = fs.createReadStream(encryptedFilePath);
-  const output = fs.createWriteStream(encryptedFilePath.replace(".enc", ""));
+  const output = fs.createWriteStream(encryptedFilePath.replace('.enc', ''));
+
   input.pipe(decipher).pipe(output);
+};
 
-  return encryptedFilePath.replace(".enc", ""); // Return decrypted file path
-}
+// Routes
+app.post('/request-otp', (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
 
-// User Registration
-app.post("/register", async (req, res) => {
-  const { email, password } = req.body;
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  // Mock sending OTP
+  console.log(`OTP for ${email}: ${otp}`);
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  try {
-    const newUser = new User({ email, password: hashedPassword });
-    await newUser.save();
-    res.send({ success: true, message: "User registered successfully." });
-  } catch (err) {
-    res.status(400).send({ success: false, message: "User registration failed." });
-  }
+  const token = jwt.sign({ email, otp }, process.env.JWT_SECRET, { expiresIn: '10m' });
+  res.json({ success: true, token });
 });
 
-// User Login
-app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+app.post('/upload', upload.single('file'), verifyToken, (req, res) => {
+  const { file } = req;
+  const { iv, encryptedFilePath } = encryptFile(file.path);
 
-  const user = await User.findOne({ email });
-  if (!user) return res.status(400).send({ success: false, message: "Invalid email or password." });
-
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) return res.status(400).send({ success: false, message: "Invalid email or password." });
-
-  // Generate JWT
-  const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-
-  res.send({ success: true, token });
-});
-
-// Middleware to Authenticate Token
-function authenticateToken(req, res, next) {
-  const token = req.headers["authorization"];
-  if (!token) return res.status(401).send({ success: false, message: "Access denied." });
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).send({ success: false, message: "Invalid token." });
-    req.user = user;
-    next();
+  fs.unlink(file.path, (err) => {
+    if (err) console.error('Error deleting original file:', err);
   });
-}
 
-// File Upload
-app.post("/upload", authenticateToken, upload.single("file"), async (req, res) => {
+  res.json({ success: true, encryptedFilePath, iv });
+});
+
+app.get('/download', verifyToken, (req, res) => {
+  const { encryptedFilePath, iv } = req.query;
+  if (!encryptedFilePath || !iv) return res.status(400).json({ success: false, message: 'Missing parameters' });
+
   try {
-    console.log("File upload initiated");
-
-    const userId = req.user.userId;
-    console.log("User ID: ", userId);
-
-    if (!req.file) {
-      console.log("No file received");
-      return res.status(400).send({ success: false, message: "No file uploaded." });
-    }
-
-    const filePath = req.file.path;
-    console.log("Uploaded file path:", filePath);
-
-    const { iv, encryptedFilePath } = encryptFile(filePath);
-    console.log("Encrypted file path:", encryptedFilePath);
-
-    fs.unlinkSync(filePath); // Remove original file to save space
-    console.log("Original file removed");
-
-    // Generate OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
-    const newOtp = new OTP({
-      email: req.body.email,
-      otp,
-      filePath: encryptedFilePath,
-      iv,
+    decryptFile(encryptedFilePath, iv);
+    const decryptedFilePath = encryptedFilePath.replace('.enc', '');
+    res.download(decryptedFilePath, () => {
+      fs.unlink(decryptedFilePath, (err) => {
+        if (err) console.error('Error deleting decrypted file:', err);
+      });
     });
-
-    await newOtp.save();
-    console.log("OTP saved");
-
-    // Log the upload
-    const log = new AuditLog({ action: "upload", userId, fileName: req.file.originalname });
-    await log.save();
-    console.log("Audit log saved");
-
-    res.send({ success: true, message: "File uploaded successfully. OTP sent to email." });
-  } catch (err) {
-    console.error("Error during file upload:", err);
-    res.status(500).send({ success: false, message: "File upload failed." });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Decryption failed' });
   }
 });
 
-// Verify OTP and Download File
-app.post("/verify-otp", authenticateToken, async (req, res) => {
-  try {
-    const { otp } = req.body;
-    console.log("OTP received for verification:", otp);
-
-    const otpRecord = await OTP.findOne({ otp });
-    if (!otpRecord) {
-      console.log("Invalid or expired OTP.");
-      return res.status(400).send({ success: false, message: "Invalid or expired OTP." });
-    }
-
-    const decryptedFilePath = decryptFile(otpRecord.filePath, otpRecord.iv);
-    console.log("File decrypted:", decryptedFilePath);
-
-    res.download(decryptedFilePath, path.basename(decryptedFilePath), async (err) => {
-      if (err) {
-        console.error("Error sending file:", err);
-      } else {
-        // Cleanup decrypted file and log download
-        fs.unlinkSync(decryptedFilePath);
-        console.log("Decrypted file removed");
-
-        const log = new AuditLog({ action: "download", userId: req.user.userId, fileName: otpRecord.filePath });
-        await log.save();
-        console.log("Download and log saved");
-      }
-    });
-  } catch (err) {
-    console.error("Error during OTP verification:", err);
-    res.status(500).send({ success: false, message: "OTP verification failed." });
-  }
-});
-
-
+// Start server
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

@@ -56,3 +56,18 @@ verifyOtpButton.addEventListener("click", async () => {
     alert("Invalid OTP.");
   }
 });
+
+const cleanupUploadsFolder = () => {
+  fs.readdir(uploadDir, (err, files) => {
+    if (err) throw err;
+
+    for (const file of files) {
+      fs.unlink(path.join(uploadDir, file), (err) => {
+        if (err) throw err;
+      });
+    }
+  });
+};
+
+// Set an interval to clean up the uploads folder every hour
+setInterval(cleanupUploadsFolder, 1800000); // Every 1800000 ms = 1.5 hour

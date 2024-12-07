@@ -1,16 +1,16 @@
 # 🚀 Secure File Sharing Platform
 
-Welcome to the **Secure File Sharing Platform**! This robust web application ensures your files remain safe and secure during transfer. Built with Node.js, this system encrypts files during upload and decrypts them during download, maintaining confidentiality. It supports Docker for containerization and integrates seamlessly with MongoDB for efficient and scalable deployment.
+Welcome to the **Secure File Sharing Platform**! This web application ensures your files are securely encrypted and decrypted during transfers. Built with Node.js, the platform supports Docker containerization and integrates seamlessly with MongoDB for efficient deployment and scalability.
 
 ---
 
 ## 🌟 Features
 
-- 🔒 **File Encryption and Decryption**: Secure your files with AES-256 encryption.
-- 📜 **Audit Logs**: Track and log all system activities.
-- 💻 **User-Friendly Interface**: Simple UI for uploading and downloading files.
-- ⚙️ **Environment Configuration**: Supports environment-based configurations with `.env`.
-- 🐳 **Docker Containerization**: Easy deployment with Docker and Docker Compose.
+- 🔒 **File Encryption & Decryption**: Ensures secure file uploads and downloads using AES-256 encryption.
+- 📜 **Audit Logs**: Tracks and logs all system activities for accountability.
+- 💻 **User-Friendly Interface**: Simple and intuitive UI for uploading and downloading files.
+- ⚙️ **Environment Configuration**: Supports environment-based configurations with `.env` files.
+- 🐳 **Docker Support**: Easy deployment using Docker and Docker Compose.
 - 🗄️ **MongoDB Integration**: Efficient database management for file metadata.
 
 ---
@@ -24,12 +24,12 @@ secure-file-sharing/
 │   ├── index.html      # Front-end HTML
 │   ├── styles.css      # Optional CSS
 │   └── script.js       # Front-end JavaScript
-├── uploads/            # Folder to store encrypted files
+├── uploads/            # Directory to store encrypted files
 ├── downloads/          # Temporary folder for decrypted downloads
 ├── logs/               # Folder for audit logs
-├── .env                # Environment variables
+├── .env                # Environment variables configuration
 ├── Dockerfile          # Dockerfile for containerization
-├── docker-compose.yml  # Docker Compose for MongoDB integration
+├── docker-compose.yml  # Docker Compose configuration for MongoDB integration
 ├── package.json        # Node.js dependencies
 └── package-lock.json   # Node.js lock file
 ```
@@ -66,8 +66,8 @@ Create a `.env` file in the root directory and define the following variables:
 
 ```plaintext
 PORT=3000
-MONGO_URI=mongodb://localhost:27017/secure-file-sharing
-SECRET_KEY=your-encryption-key
+MONGO_URI=mongodb://127.0.0.1:27017/secure-file-sharing
+JWT_SECRET=your-jwt-secret
 ```
 
 ### 4. Run the Application
@@ -94,16 +94,21 @@ Access the application at `http://localhost:3000`.
 
 ## 📝 Usage
 
-1. Open the web interface at `http://localhost:3000`.
-2. Upload a file to encrypt it.
-3. Download the encrypted file, which will be decrypted automatically.
+1. **Upload a File**:
+   - Open the web interface at `http://localhost:3000`.
+   - Upload a file to encrypt it.
+   - The file will be encrypted and stored securely.
+
+2. **Verify OTP and Download File**:
+   - Enter the OTP received via email to download the encrypted file.
+   - The file will be decrypted automatically.
 
 ---
 
 ## 📁 Folder Descriptions
 
 - **`uploads/`**: Stores encrypted files securely.
-- **`downloads/`**: Temporarily holds decrypted files for downloads.
+- **`downloads/`**: Temporarily holds decrypted files for download.
 - **`logs/`**: Contains system audit logs for tracking activities.
 - **`public/`**: Front-end files including HTML, CSS, and JavaScript.
 
@@ -118,23 +123,96 @@ Access the application at `http://localhost:3000`.
 
 ## 🐳 Docker Support
 
-- **Build the Docker image manually**:
+### Building and Pushing Docker Image
 
-  ```bash
-  docker build -t secure-file-sharing .
-  ```
+1. **Build the Docker Image**:
 
-- **Run the container**:
+    ```bash
+    docker build -t your-docker-image:latest .
+    ```
 
-  ```bash
-  docker run -p 3000:3000 secure-file-sharing
-  ```
+2. **Log in to Docker Hub (or your chosen registry)**:
 
-- **Stop containers**:
+    ```bash
+    docker login
+    ```
 
-  ```bash
-  docker-compose down
-  ```
+3. **Push the Docker Image**:
+
+    ```bash
+    docker push your-docker-image:latest
+    ```
+
+### Running with Docker Compose
+
+1. **Build and Run Containers**:
+
+    ```bash
+    docker-compose up --build
+    ```
+
+2. **Stop Containers**:
+
+    ```bash
+    docker-compose down
+    ```
+
+### Kubernetes Deployment
+
+1. **Update Deployment YAML**:
+   Ensure your `Deployment.yaml` file includes resource limits.
+
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: secure-file-sharing
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          app: secure-file-sharing
+      template:
+        metadata:
+          labels:
+            app: secure-file-sharing
+        spec:
+          containers:
+            - name: app
+              image: your-docker-image:latest
+              ports:
+                - containerPort: 3000
+              env:
+                - name: MONGO_URI
+                  value: "mongodb://127.0.0.1:27017/secure-file-sharing"
+                - name: JWT_SECRET
+                  value: "your-jwt-secret"
+              resources:
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+                requests:
+                  memory: "256Mi"
+                  cpu: "250m"
+    ```
+
+2. **Apply the Deployment**:
+
+    ```bash
+    kubectl apply -f Deployment.yaml
+    ```
+
+3. **Expose the Deployment**:
+
+    ```bash
+    kubectl expose deployment secure-file-sharing --type=LoadBalancer --port=3000 --target-port=3000
+    ```
+
+4. **Get Service Details**:
+
+    ```bash
+    kubectl get services
+    ```
 
 ---
 
@@ -165,7 +243,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## 🙏 Acknowledgments
 
-- Node.js and Express.js for making development seamless.
+- Node.js and Express.js for seamless development.
 - MongoDB for efficient data handling.
 - Docker for easy deployment and scalability.
 
