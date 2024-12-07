@@ -115,52 +115,84 @@ function authenticateToken(req, res, next) {
 
 // File Upload
 app.post("/upload", authenticateToken, upload.single("file"), async (req, res) => {
-  const userId = req.user.userId;
-  const filePath = req.file.path;
-  const { iv, encryptedFilePath } = encryptFile(filePath);
+  try {
+    console.log("File upload initiated");
 
-  fs.unlinkSync(filePath); // Remove original file to save space
+    const userId = req.user.userId;
+    console.log("User ID: ", userId);
 
-  // Generate OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
-  const newOtp = new OTP({
-    email: req.body.email,
-    otp,
-    filePath: encryptedFilePath,
-    iv,
-  });
+    if (!req.file) {
+      console.log("No file received");
+      return res.status(400).send({ success: false, message: "No file uploaded." });
+    }
 
-  await newOtp.save();
+    const filePath = req.file.path;
+    console.log("Uploaded file path:", filePath);
 
-  // Log the upload
-  const log = new AuditLog({ action: "upload", userId, fileName: req.file.originalname });
-  await log.save();
+    const { iv, encryptedFilePath } = encryptFile(filePath);
+    console.log("Encrypted file path:", encryptedFilePath);
 
-  res.send({ success: true, message: "File uploaded successfully. OTP sent to email." });
+    fs.unlinkSync(filePath); // Remove original file to save space
+    console.log("Original file removed");
+
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
+    const newOtp = new OTP({
+      email: req.body.email,
+      otp,
+      filePath: encryptedFilePath,
+      iv,
+    });
+
+    await newOtp.save();
+    console.log("OTP saved");
+
+    // Log the upload
+    const log = new AuditLog({ action: "upload", userId, fileName: req.file.originalname });
+    await log.save();
+    console.log("Audit log saved");
+
+    res.send({ success: true, message: "File uploaded successfully. OTP sent to email." });
+  } catch (err) {
+    console.error("Error during file upload:", err);
+    res.status(500).send({ success: false, message: "File upload failed." });
+  }
 });
 
 // Verify OTP and Download File
 app.post("/verify-otp", authenticateToken, async (req, res) => {
-  const { otp } = req.body;
+  try {
+    const { otp } = req.body;
+    console.log("OTP received for verification:", otp);
 
-  const otpRecord = await OTP.findOne({ otp });
-  if (!otpRecord) {
-    return res.status(400).send({ success: false, message: "Invalid or expired OTP." });
-  }
-
-  const decryptedFilePath = decryptFile(otpRecord.filePath, otpRecord.iv);
-
-  res.download(decryptedFilePath, path.basename(decryptedFilePath), (err) => {
-    if (err) {
-      console.error("Error sending file:", err);
-    } else {
-      // Cleanup decrypted file and log download
-      fs.unlinkSync(decryptedFilePath);
-      const log = new AuditLog({ action: "download", userId: req.user.userId, fileName: otpRecord.filePath });
-      log.save();
+    const otpRecord = await OTP.findOne({ otp });
+    if (!otpRecord) {
+      console.log("Invalid or expired OTP.");
+      return res.status(400).send({ success: false, message: "Invalid or expired OTP." });
     }
-  });
+
+    const decryptedFilePath = decryptFile(otpRecord.filePath, otpRecord.iv);
+    console.log("File decrypted:", decryptedFilePath);
+
+    res.download(decryptedFilePath, path.basename(decryptedFilePath), async (err) => {
+      if (err) {
+        console.error("Error sending file:", err);
+      } else {
+        // Cleanup decrypted file and log download
+        fs.unlinkSync(decryptedFilePath);
+        console.log("Decrypted file removed");
+
+        const log = new AuditLog({ action: "download", userId: req.user.userId, fileName: otpRecord.filePath });
+        await log.save();
+        console.log("Download and log saved");
+      }
+    });
+  } catch (err) {
+    console.error("Error during OTP verification:", err);
+    res.status(500).send({ success: false, message: "OTP verification failed." });
+  }
 });
+
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
