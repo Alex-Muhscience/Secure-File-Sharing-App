@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-file-sharing
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: secure-file-sharing
+  template:
+    metadata:
+      labels:
+        app: secure-file-sharing
+    spec:
+      containers:
+        - name: app
+          image: zazhoxj007yvefxza07n4nc4q
+          ports:
+            - containerPort: 3000
+          env:
+            - name: MONGO_URI
+              value: "mongodb://127.0.0.1:27017/secure-file-sharing"
+            - name: JWT_SECRET
+              value: "17ff045525396c19dc2fadaef9716851625c402b70d862fa3cc5af64d63621b1"
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
