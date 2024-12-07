@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secure File Sharing</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #f4f4f9;
+    }
+    .container {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      width: 90%;
+      max-width: 500px;
+    }
+    h1 {
+      font-size: 24px;
+      color: #333;
+    }
+    input, button {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin: 10px 0;
+      width: calc(100% - 24px);
+    }
+    button {
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+      border: none;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    .otp-field {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Secure File Sharing</h1>
+    <form id="fileUploadForm" enctype="multipart/form-data">
+      <input type="file" id="fileInput" required />
+      <button type="button" id="uploadButton">Upload File</button>
+    </form>
+    <div class="otp-field" id="otpField">
+      <input type="text" id="otpInput" placeholder="Enter OTP" required />
+      <button type="button" id="verifyOtpButton">Verify OTP</button>
+    </div>
+  </div>
+  <script>
+    const uploadButton = document.getElementById("uploadButton");
+    const otpField = document.getElementById("otpField");
+    const fileInput = document.getElementById("fileInput");
+    const otpInput = document.getElementById("otpInput");
+    const verifyOtpButton = document.getElementById("verifyOtpButton");
+
+    uploadButton.addEventListener("click", async () => {
+      if (fileInput.files.length === 0) {
+        alert("Please select a file to upload.");
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // Send file to the server
+      const response = await fetch("/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        otpField.style.display = "block";
+        alert("File uploaded successfully! An OTP has been sent to your email.");
+      } else {
+        alert("Error uploading file.");
+      }
+    });
+
+    verifyOtpButton.addEventListener("click", async () => {
+      const otp = otpInput.value.trim();
+
+      if (!otp) {
+        alert("Please enter the OTP.");
+        return;
+      }
+
+      // Verify OTP with the server
+      const response = await fetch("/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otp }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert("OTP verified! You can now securely access your file.");
+      } else {
+        alert("Invalid OTP, please try again.");
+      }
+    });
+  </script>
+</body>
+</html>
