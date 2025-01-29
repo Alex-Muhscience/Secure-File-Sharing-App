@@ -1,250 +1,224 @@
-# 🚀 Secure File Sharing Platform
+# 🚀 **Hybrid Blockchain-Based Secure File Transfer System**
 
-Welcome to the **Secure File Sharing Platform**! This web application ensures your files are securely encrypted and decrypted during transfers. Built with Node.js, the platform supports Docker containerization and integrates seamlessly with MongoDB for efficient deployment and scalability.
+> **A Decentralized, Scalable, and Secure File Transfer Solution**
 
----
+🔐 **Ensuring End-to-End Security for File Transfers**
 
-## 🌟 Features
-
-- 🔒 **File Encryption & Decryption**: Ensures secure file uploads and downloads using AES-256 encryption.
-- 📜 **Audit Logs**: Tracks and logs all system activities for accountability.
-- 💻 **User-Friendly Interface**: Simple and intuitive UI for uploading and downloading files.
-- ⚙️ **Environment Configuration**: Supports environment-based configurations with `.env` files.
-- 🐳 **Docker Support**: Easy deployment using Docker and Docker Compose.
-- 🗄️ **MongoDB Integration**: Efficient database management for file metadata.
+This system enables secure file transfers using hybrid blockchain architecture. It encrypts files using **AES-256**, stores metadata (**hash, permissions**) on **Ethereum smart contracts**, and saves encrypted files in **IPFS/AWS S3**.
 
 ---
 
-## 📂 Project Structure
+## 🌟 **Features**
 
-```plaintext
-secure-file-sharing/
-├── app.js              # Main server file
-├── public/             # Front-end files
-│   ├── index.html      # Front-end HTML
-│   ├── styles.css      # Optional CSS
-│   └── script.js       # Front-end JavaScript
-├── uploads/            # Directory to store encrypted files
-├── downloads/          # Temporary folder for decrypted downloads
-├── logs/               # Folder for audit logs
-├── .env                # Environment variables configuration
-├── Dockerfile          # Dockerfile for containerization
-├── docker-compose.yml  # Docker Compose configuration for MongoDB integration
-├── package.json        # Node.js dependencies
-└── package-lock.json   # Node.js lock file
+✔️ **End-to-End Security**: Files are AES-256 encrypted before storage 🔒  
+✔️ **Blockchain-Based Access Control**: Only authorized users can access files 📜  
+✔️ **Decentralized Identity (DID)**: Secure authentication with Web3 login 💻  
+✔️ **Tamper-Proof Metadata**: File hashes & timestamps stored on-chain 🛡  
+✔️ **Hybrid Storage**: Metadata on blockchain, encrypted files in IPFS, AWS S3, or private storage 📂  
+✔️ **User-Friendly Web UI**: Upload, retrieve, and manage files easily 🖥️  
+✔️ **Smart Contracts for Verification**: Prevent unauthorized file access 🚀  
+✔️ **Audit Logging & Tracking**: Ensures accountability and tracking 📊  
+
+---
+
+## 🏗️ **System Architecture**
+
+### 🔹 **1. User Authentication & Access Control**
+🔑 **Decentralized Identity** (DID/Web3 login) for secure authentication  
+🛡 **Role-based access control (RBAC)** managed via smart contracts  
+
+### 🔹 **2. File Upload & Encryption**
+🔒 **Files are encrypted** using AES-256 before upload  
+📜 **Smart contract stores metadata** (file hash, permissions, timestamps)  
+📁 **Encrypted file stored** in IPFS, AWS S3, or private cloud  
+
+### 🔹 **3. Blockchain Layer (Ethereum Smart Contracts)**
+📜 **Smart contracts enforce file ownership & access control**  
+⏳ **Tamper-proof metadata stored on-chain for auditing**  
+
+### 🔹 **4. Off-Chain Storage (IPFS / AWS S3 / Private Storage)**
+📁 **Encrypted files stored securely off-chain**  
+🔄 **File access verified via blockchain before retrieval**  
+
+### 🔹 **5. File Retrieval & Decryption**
+✅ **Smart contract verifies user access rights**  
+🔑 **User retrieves & decrypts the file locally**  
+
+---
+
+## 📂 **Project Structure**
+```
+secure-file-transfer/
+├── frontend/         # React.js frontend (Web3 integration)
+│   ├── index.html    # UI for file upload & retrieval
+│   ├── styles.css    # CSS styles
+│   ├── app.js        # Frontend logic (Web3, IPFS, API)
+├── backend/          # Node.js API for IPFS & blockchain
+│   ├── server.js     # Backend API
+│   ├── config.js     # API configuration
+│   ├── routes/       # API routes for file handling
+│   ├── storage/      # Encrypted file storage (local backup)
+├── contracts/        # Solidity smart contracts
+│   ├── FileRegistry.sol  # Smart contract for metadata storage
+│   ├── AccessControl.sol # Smart contract for access control
+│   ├── migrations/   # Deployment scripts
+├── blockchain/       # Hardhat scripts for blockchain deployment
+│   ├── deploy.js     # Smart contract deployment script
+│   ├── test/         # Unit tests for contracts
+├── .env              # Environment variables
+├── Dockerfile        # Dockerfile for containerization
+├── docker-compose.yml # Docker Compose setup for IPFS & MongoDB
+└── README.md         # Project documentation
 ```
 
 ---
 
-## 🛠️ Requirements
-
-- **Node.js** (v16 or later)
-- **Docker**
-- **Docker Compose**
-- **MongoDB** (if running without Docker Compose)
+## 🛠️ **Requirements**
+✅ Node.js (v16 or later)  
+✅ Docker & Docker Compose  
+✅ IPFS Node or AWS S3 Bucket  
+✅ Ethereum Testnet (Goerli, Sepolia, or local Hardhat)  
+✅ MetaMask or Web3 Wallet  
 
 ---
 
-## 🚀 Getting Started
+## 🚀 **Getting Started**
 
-### 1. Clone the Repository
-
+### 1️⃣ **Clone the Repository**
 ```bash
-git clone https://github.com/your-username/secure-file-sharing.git
-cd secure-file-sharing
+git clone https://github.com/your-username/secure-file-transfer.git
+cd secure-file-transfer
 ```
 
-### 2. Install Dependencies
-
+### 2️⃣ **Install Dependencies**
 ```bash
 npm install
 ```
 
-### 3. Set Up Environment Variables
-
-Create a `.env` file in the root directory and define the following variables:
-
+### 3️⃣ **Set Up Environment Variables**
+Create a `.env` file in the root directory and define:
 ```plaintext
 PORT=3000
-MONGO_URI=mongodb://127.0.0.1:27017/secure-file-sharing
+MONGO_URI=mongodb://127.0.0.1:27017/secure-file-transfer
+INFURA_API_KEY=your-infura-api-key
+ETHEREUM_NETWORK=goerli
+PRIVATE_KEY=your-private-key
+IPFS_API_URL=https://ipfs.infura.io:5001
 JWT_SECRET=your-jwt-secret
 ```
 
-### 4. Run the Application
-
-#### Without Docker
-
+### 4️⃣ **Deploy Smart Contracts**
+#### Run on a local blockchain:
 ```bash
-node app.js
+npx hardhat node
+npx hardhat run scripts/deploy.js --network localhost
+```
+#### Deploy to Ethereum Testnet:
+```bash
+npx hardhat run scripts/deploy.js --network goerli
 ```
 
-Access the application at `http://localhost:3000`.
+### 5️⃣ **Start the Backend API**
+```bash
+node backend/server.js
+```
 
-#### With Docker
+### 6️⃣ **Start the Frontend**
+```bash
+cd frontend
+npm start
+```
+🖥 **Visit** [http://localhost:3000](http://localhost:3000) **to access the UI.**
 
-Build and run the container:
+---
 
+## 📝 **Usage**
+
+### 🔹 **Upload a File**
+1. Open the web interface at [http://localhost:3000](http://localhost:3000)
+2. Select and upload a file
+3. File is AES-256 encrypted
+4. Encrypted file is stored in IPFS/S3, metadata on Ethereum
+5. File hash & owner details saved on-chain
+
+### 🔹 **Verify & Download File**
+1. User requests file access
+2. Smart contract verifies ownership & access rights
+3. If authorized, IPFS/S3 link is shared
+4. User downloads and decrypts file locally
+
+---
+
+## 📜 **Scripts**
+
+🔹 **Start Backend API**  
+```bash
+npm start
+```
+
+🔹 **Run in Development Mode (nodemon)**  
+```bash
+npm run dev
+```
+
+🔹 **Deploy Smart Contracts**  
+```bash
+npx hardhat run scripts/deploy.js --network goerli
+```
+
+---
+
+## 🐳 **Docker Support**
+
+### Build and Run Containers
 ```bash
 docker-compose up --build
 ```
 
-Access the application at `http://localhost:3000`.
+### Stop Containers
+```bash
+docker-compose down
+```
 
 ---
 
-## 📝 Usage
+## ☁️ **Kubernetes Deployment**
 
-1. **Upload a File**:
-   - Open the web interface at `http://localhost:3000`.
-   - Upload a file to encrypt it.
-   - The file will be encrypted and stored securely.
-
-2. **Verify OTP and Download File**:
-   - Enter the OTP received via email to download the encrypted file.
-   - The file will be decrypted automatically.
+### Deploy with Kubernetes
+```bash
+kubectl apply -f Deployment.yaml
+kubectl expose deployment secure-file-transfer --type=LoadBalancer --port=3000 --target-port=3000
+kubectl get services
+```
 
 ---
 
-## 📁 Folder Descriptions
-
-- **`uploads/`**: Stores encrypted files securely.
-- **`downloads/`**: Temporarily holds decrypted files for download.
-- **`logs/`**: Contains system audit logs for tracking activities.
-- **`public/`**: Front-end files including HTML, CSS, and JavaScript.
-
----
-
-## 📜 Scripts
-
-- **Start Server**: `npm start`
-- **Run in Development Mode**: `npm run dev` (requires `nodemon`)
+## 🖥️ **Technologies Used**
+🔹 **Node.js & Express.js** - Backend API  
+🔹 **Ethereum Smart Contracts** - Solidity, Hardhat  
+🔹 **IPFS & AWS S3** - Off-chain storage  
+🔹 **React.js** - Frontend  
+🔹 **Web3.js & MetaMask** - Decentralized Authentication  
+🔹 **AES-256 Encryption** - Secure file storage  
+🔹 **MongoDB** - File metadata storage  
+🔹 **Docker & Kubernetes** - Containerization & orchestration  
 
 ---
 
-## 🐳 Docker Support
-
-### Building and Pushing Docker Image
-
-1. **Build the Docker Image**:
-
-    ```bash
-    docker build -t your-docker-image:latest .
-    ```
-
-2. **Log in to Docker Hub (or your chosen registry)**:
-
-    ```bash
-    docker login
-    ```
-
-3. **Push the Docker Image**:
-
-    ```bash
-    docker push your-docker-image:latest
-    ```
-
-### Running with Docker Compose
-
-1. **Build and Run Containers**:
-
-    ```bash
-    docker-compose up --build
-    ```
-
-2. **Stop Containers**:
-
-    ```bash
-    docker-compose down
-    ```
-
-### Kubernetes Deployment
-
-1. **Update Deployment YAML**:
-   Ensure your `Deployment.yaml` file includes resource limits.
-
-    ```yaml
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: secure-file-sharing
-    spec:
-      replicas: 3
-      selector:
-        matchLabels:
-          app: secure-file-sharing
-      template:
-        metadata:
-          labels:
-            app: secure-file-sharing
-        spec:
-          containers:
-            - name: app
-              image: your-docker-image:latest
-              ports:
-                - containerPort: 3000
-              env:
-                - name: MONGO_URI
-                  value: "mongodb://127.0.0.1:27017/secure-file-sharing"
-                - name: JWT_SECRET
-                  value: "your-jwt-secret"
-              resources:
-                limits:
-                  memory: "512Mi"
-                  cpu: "500m"
-                requests:
-                  memory: "256Mi"
-                  cpu: "250m"
-    ```
-
-2. **Apply the Deployment**:
-
-    ```bash
-    kubectl apply -f Deployment.yaml
-    ```
-
-3. **Expose the Deployment**:
-
-    ```bash
-    kubectl expose deployment secure-file-sharing --type=LoadBalancer --port=3000 --target-port=3000
-    ```
-
-4. **Get Service Details**:
-
-    ```bash
-    kubectl get services
-    ```
+## 🤝 **Contributing**
+🔹 Fork the repo  
+🔹 Create a new branch: `feature/new-feature`  
+🔹 Submit a Pull Request  
 
 ---
 
-## 🖥️ Technologies Used
-
-- **Node.js**: Backend runtime.
-- **Express.js**: Server framework.
-- **MongoDB**: Database for file metadata.
-- **Crypto**: Built-in module for encryption/decryption.
-- **Docker**: Containerization.
+## 📜 **License**
+MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-## 🤝 Contributing
+## 📧 **Contact**
+📧 **Alex Murimi Kamau** - alexkamau712@gmail.com  
+🌐 **GitHub** - [Alex-Muhscience](https://github.com/Alex-Muhscience)  
 
-1. Fork the repository.
-2. Create a new branch.
-3. Make changes and test thoroughly.
-4. Submit a pull request.
-
----
-
-## 📜 License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-## 🙏 Acknowledgments
-
-- Node.js and Express.js for seamless development.
-- MongoDB for efficient data handling.
-- Docker for easy deployment and scalability.
-
----
+🚀 **"Secure. Decentralized. Efficient."** 🔐
