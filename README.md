@@ -1,16 +1,18 @@
+```markdown
 # 🚀 **Hybrid Blockchain-Based Secure File Transfer System**
 
 > **A Decentralized, Scalable, and Secure File Transfer Solution**
 
 🔐 **Ensuring End-to-End Security for File Transfers**
 
-This system enables secure file transfers using hybrid blockchain architecture. It encrypts files using **AES-256**, stores metadata (**hash, permissions**) on **Ethereum smart contracts**, and saves encrypted files in **IPFS/AWS S3**.
+This system enables secure file transfers using hybrid blockchain architecture. It encrypts files using **AES-256**, compresses files using **Zstandard (zstd)**, stores metadata (**hash, permissions**) on **Ethereum smart contracts**, and saves encrypted files in **IPFS/AWS S3**.
 
 ---
 
 ## 🌟 **Features**
 
 ✔️ **End-to-End Security**: Files are AES-256 encrypted before storage 🔒  
+✔️ **Intelligent File Compression**: Files are compressed using Zstandard (zstd) for optimal storage and transfer 📦  
 ✔️ **Blockchain-Based Access Control**: Only authorized users can access files 📜  
 ✔️ **Decentralized Identity (DID)**: Secure authentication with Web3 login 💻  
 ✔️ **Tamper-Proof Metadata**: File hashes & timestamps stored on-chain 🛡  
@@ -27,8 +29,9 @@ This system enables secure file transfers using hybrid blockchain architecture. 
 🔑 **Decentralized Identity** (DID/Web3 login) for secure authentication  
 🛡 **Role-based access control (RBAC)** managed via smart contracts  
 
-### 🔹 **2. File Upload & Encryption**
-🔒 **Files are encrypted** using AES-256 before upload  
+### 🔹 **2. File Upload, Compression & Encryption**
+📦 **Files are compressed** using Zstandard (zstd) for optimal storage  
+🔒 **Compressed files are encrypted** using AES-256 before upload  
 📜 **Smart contract stores metadata** (file hash, permissions, timestamps)  
 📁 **Encrypted file stored** in IPFS, AWS S3, or private cloud  
 
@@ -40,35 +43,36 @@ This system enables secure file transfers using hybrid blockchain architecture. 
 📁 **Encrypted files stored securely off-chain**  
 🔄 **File access verified via blockchain before retrieval**  
 
-### 🔹 **5. File Retrieval & Decryption**
+### 🔹 **5. File Retrieval, Decompression & Decryption**
 ✅ **Smart contract verifies user access rights**  
-🔑 **User retrieves & decrypts the file locally**  
+📦 **User retrieves, decompresses, and decrypts the file locally**  
 
 ---
 
 ## 📂 **Project Structure**
-```
+
+```plaintext
 secure-file-transfer/
-├── frontend/         # React.js frontend (Web3 integration)
-│   ├── index.html    # UI for file upload & retrieval
-│   ├── styles.css    # CSS styles
-│   ├── app.js        # Frontend logic (Web3, IPFS, API)
-├── backend/          # Node.js API for IPFS & blockchain
-│   ├── server.js     # Backend API
-│   ├── config.js     # API configuration
-│   ├── routes/       # API routes for file handling
-│   ├── storage/      # Encrypted file storage (local backup)
-├── contracts/        # Solidity smart contracts
-│   ├── FileRegistry.sol  # Smart contract for metadata storage
-│   ├── AccessControl.sol # Smart contract for access control
-│   ├── migrations/   # Deployment scripts
-├── blockchain/       # Hardhat scripts for blockchain deployment
-│   ├── deploy.js     # Smart contract deployment script
-│   ├── test/         # Unit tests for contracts
-├── .env              # Environment variables
-├── Dockerfile        # Dockerfile for containerization
-├── docker-compose.yml # Docker Compose setup for IPFS & MongoDB
-└── README.md         # Project documentation
+├── 📁 frontend/         # React.js frontend (Web3 integration)
+│   ├── 📄 index.html    # UI for file upload & retrieval
+│   ├── 📄 styles.css    # CSS styles
+│   ├── 📄 app.js        # Frontend logic (Web3, IPFS, API)
+├── 📁 backend/          # Node.js API for IPFS & blockchain
+│   ├── 📄 server.js     # Backend API
+│   ├── 📄 config.js     # API configuration
+│   ├── 📁 routes/       # API routes for file handling
+│   ├── 📁 storage/      # Encrypted file storage (local backup)
+├── 📁 contracts/        # Solidity smart contracts
+│   ├── 📄 FileRegistry.sol  # Smart contract for metadata storage
+│   ├── 📄 AccessControl.sol # Smart contract for access control
+│   ├── 📁 migrations/   # Deployment scripts
+├── 📁 blockchain/       # Hardhat scripts for blockchain deployment
+│   ├── 📄 deploy.js     # Smart contract deployment script
+│   ├── 📁 test/         # Unit tests for contracts
+├── 📄 .env              # Environment variables
+├── 📄 Dockerfile        # Dockerfile for containerization
+├── 📄 docker-compose.yml # Docker Compose setup for IPFS & MongoDB
+└── 📄 README.md         # Project documentation
 ```
 
 ---
@@ -137,15 +141,16 @@ npm start
 ### 🔹 **Upload a File**
 1. Open the web interface at [http://localhost:3000](http://localhost:3000)
 2. Select and upload a file
-3. File is AES-256 encrypted
-4. Encrypted file is stored in IPFS/S3, metadata on Ethereum
-5. File hash & owner details saved on-chain
+3. File is compressed using Zstandard (zstd)
+4. Compressed file is AES-256 encrypted
+5. Encrypted file is stored in IPFS/S3, metadata on Ethereum
+6. File hash & owner details saved on-chain
 
 ### 🔹 **Verify & Download File**
 1. User requests file access
 2. Smart contract verifies ownership & access rights
 3. If authorized, IPFS/S3 link is shared
-4. User downloads and decrypts file locally
+4. User downloads, decompresses, and decrypts file locally
 
 ---
 
@@ -194,14 +199,18 @@ kubectl get services
 ---
 
 ## 🖥️ **Technologies Used**
-🔹 **Node.js & Express.js** - Backend API  
-🔹 **Ethereum Smart Contracts** - Solidity, Hardhat  
-🔹 **IPFS & AWS S3** - Off-chain storage  
-🔹 **React.js** - Frontend  
-🔹 **Web3.js & MetaMask** - Decentralized Authentication  
-🔹 **AES-256 Encryption** - Secure file storage  
-🔹 **MongoDB** - File metadata storage  
-🔹 **Docker & Kubernetes** - Containerization & orchestration  
+
+| **Category**            | **Technologies**                                                                 |
+|--------------------------|---------------------------------------------------------------------------------|
+| **Backend**              | <img src="https://img.icons8.com/color/48/000000/nodejs.png" alt="Node.js" title="Node.js"/> <img src="https://img.icons8.com/color/48/000000/express.png" alt="Express.js" title="Express.js"/> |
+| **Blockchain**           | <img src="https://img.icons8.com/color/48/000000/ethereum.png" alt="Ethereum" title="Ethereum"/> <img src="https://img.icons8.com/color/48/000000/solidity.png" alt="Solidity" title="Solidity"/> <img src="https://img.icons8.com/color/48/000000/hardhat.png" alt="Hardhat" title="Hardhat"/> |
+| **Storage**              | <img src="https://img.icons8.com/color/48/000000/ipfs.png" alt="IPFS" title="IPFS"/> <img src="https://img.icons8.com/color/48/000000/amazon-s3.png" alt="AWS S3" title="AWS S3"/> |
+| **Frontend**             | <img src="https://img.icons8.com/color/48/000000/react-native.png" alt="React.js" title="React.js"/> |
+| **Authentication**       | <img src="https://img.icons8.com/color/48/000000/metamask.png" alt="MetaMask" title="MetaMask"/> <img src="https://img.icons8.com/color/48/000000/web3js.png" alt="Web3.js" title="Web3.js"/> |
+| **Encryption**           | <img src="https://img.icons8.com/color/48/000000/encryption.png" alt="AES-256" title="AES-256"/> |
+| **Compression**          | <img src="https://img.icons8.com/color/48/000000/zip.png" alt="Zstandard (zstd)" title="Zstandard (zstd)"/> |
+| **Database**             | <img src="https://img.icons8.com/color/48/000000/mongodb.png" alt="MongoDB" title="MongoDB"/> |
+| **DevOps**               | <img src="https://img.icons8.com/color/48/000000/docker.png" alt="Docker" title="Docker"/> <img src="https://img.icons8.com/color/48/000000/kubernetes.png" alt="Kubernetes" title="Kubernetes"/> |
 
 ---
 
@@ -221,4 +230,5 @@ MIT License - See [LICENSE](LICENSE) for details.
 📧 **Alex Murimi Kamau** - alexkamau712@gmail.com  
 🌐 **GitHub** - [Alex-Muhscience](https://github.com/Alex-Muhscience)  
 
-🚀 **"Secure. Decentralized. Efficient."** 🔐
+🚀 **"Secure. Decentralized. Efficient."** 🔐  
+```
