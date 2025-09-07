@@ -1,13 +1,59 @@
-version: '3.1'
+version: '3.8'
 
 services:
-  mongo:
-    image: mongo
-    restart: always
+  app:
+    build: .
     ports:
-      - 27017:27017
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongo:27017/secure-file-sharing
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - EMAIL_SERVICE=${EMAIL_SERVICE}
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASS=${EMAIL_PASS}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+    depends_on:
+      - mongo
+    volumes:
+      - ./uploads:/usr/src/app/uploads
+      - ./downloads:/usr/src/app/downloads
+      - ./logs:/usr/src/app/logs
+    restart: unless-stopped
+    networks:
+      - secure-network
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
     volumes:
       - mongo-data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      - MONGO_INITDB_DATABASE=secure-file-sharing
+    networks:
+      - secure-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - secure-network
 
 volumes:
   mongo-data:
+
+networks:
+  secure-network:
+    driver: bridge

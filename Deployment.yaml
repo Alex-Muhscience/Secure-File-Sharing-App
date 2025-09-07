@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: secure-file-sharing
+  labels:
+    app: secure-file-sharing
 spec:
   replicas: 3
   selector:
@@ -14,14 +16,50 @@ spec:
     spec:
       containers:
         - name: app
-          image: zazhoxj007yvefxza07n4nc4q
+          image: secure-file-sharing:latest
           ports:
             - containerPort: 3000
           env:
+            - name: NODE_ENV
+              value: "production"
             - name: MONGO_URI
-              value: "mongodb://127.0.0.1:27017/secure-file-sharing"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: mongo-uri
             - name: JWT_SECRET
-              value: "17ff045525396c19dc2fadaef9716851625c402b70d862fa3cc5af64d63621b1"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: jwt-secret
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: encryption-key
+            - name: EMAIL_SERVICE
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: email-service
+                  optional: true
+            - name: EMAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: email-user
+                  optional: true
+            - name: EMAIL_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: email-pass
+                  optional: true
+            - name: ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: allowed-origins
           resources:
             limits:
               memory: "512Mi"
@@ -29,3 +67,92 @@ spec:
             requests:
               memory: "256Mi"
               cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: uploads
+              mountPath: /usr/src/app/uploads
+            - name: downloads
+              mountPath: /usr/src/app/downloads
+            - name: logs
+              mountPath: /usr/src/app/logs
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: uploads-pvc
+        - name: downloads
+          emptyDir: {}
+        - name: logs
+          persistentVolumeClaim:
+            claimName: logs-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-file-sharing-service
+spec:
+  selector:
+    app: secure-file-sharing
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  email-service: "gmail"
+  allowed-origins: "https://your-domain.com,https://www.your-domain.com"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+type: Opaque
+data:
+  # Base64 encoded values - replace with your actual values
+  mongo-uri: bW9uZ29kYjovL21vbmdvLXNlcnZpY2U6MjcwMTcvc2VjdXJlLWZpbGUtc2hhcmluZw==
+  jwt-secret: MTdmZjA0NTUyNTM5NmMxOWRjMmZhZGFlZjk3MTY4NTE2MjVjNDAyYjcwZDg2MmZhM2NjNWFmNjRkNjM2MjFiMQ==
+  encryption-key: N2M4ZTJmOGEzYzRiNWQ2ZTFmOGM5YTBiN2Q2ZTVjNGY4YTFiMmMzZDRlNWY2YTdiOGM5ZDBlMWYyYTNiNGM1ZA==
+  # email-user: <base64-encoded-email>
+  # email-pass: <base64-encoded-password>
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uploads-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: logs-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

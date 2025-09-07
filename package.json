@@ -1,15 +1,70 @@
 {
+  "name": "secure-file-sharing-platform",
+  "version": "1.0.0",
+  "description": "A secure file sharing platform with encryption, OTP verification, and MongoDB integration",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "code-quality": "npm run lint && npm run format:check"
+  },
+  "keywords": [
+    "file-sharing",
+    "encryption",
+    "security",
+    "nodejs",
+    "mongodb"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
   "dependencies": {
-    "ai": "^4.0.13",
-    "aws-sdk": "^2.1692.0",
+    "@openzeppelin/contracts": "^5.4.0",
+    "@pinata/sdk": "^2.1.0",
+    "axios": "^1.11.0",
     "bcrypt": "^5.1.1",
-    "body-parser": "^1.20.3",
-    "crypto": "^1.0.1",
-    "dotenv": "^16.4.7",
+    "chai": "^6.0.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "ethereum-waffle": "^4.0.10",
     "express": "^4.21.2",
+    "express-rate-limit": "^6.11.2",
+    "form-data": "^4.0.4",
+    "fzstd": "^0.1.1",
+    "hardhat": "^3.0.4",
+    "ipfs-http-client": "^60.0.1",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.8.4",
+    "kubo-rpc-client": "^5.2.0",
+    "lts": "^2.0.0",
+    "mongoose": "^7.8.7",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.9.16"
-  }
+    "nodemailer": "^6.10.1",
+    "web3": "^4.16.0",
+    "winston": "^3.17.0",
+    "zstd-codec": "^0.1.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.35.0",
+    "@nomicfoundation/hardhat-ethers": "^4.0.0",
+    "eslint": "^9.35.0",
+    "ethers": "^6.15.0",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.6.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alex-Muhscience/Secure-File-Sharing-App.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Alex-Muhscience/Secure-File-Sharing-App/issues"
+  },
+  "homepage": "https://github.com/Alex-Muhscience/Secure-File-Sharing-App#readme",
+  "type": "module"
 }

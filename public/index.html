@@ -3,22 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Secure File Sharing</title>
+  <title>Secure File Sharing Platform</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔒</text></svg>">
 </head>
 <body>
   <div class="container">
-    <h1>Secure File Sharing</h1>
+    <h1>🔒 Secure File Sharing</h1>
+    
+    <div id="statusMessage" class="status-message" style="display:none;"></div>
+    
     <form id="fileUploadForm" enctype="multipart/form-data">
-      <input type="email" id="emailInput" placeholder="Enter your email" required />
-      <input type="file" id="fileInput" required />
-      <button type="button" id="uploadButton">Upload File</button>
+      <div class="form-group">
+        <label for="emailInput">📧 Email Address</label>
+        <input type="email" id="emailInput" placeholder="Enter your email address" required />
+      </div>
+      
+      <div class="form-group">
+        <label for="fileInput">📁 Select File</label>
+        <input type="file" id="fileInput" required />
+        <div id="fileInfo" class="file-info" style="display:none;"></div>
+      </div>
+      
+      <button type="button" id="uploadButton">
+        <span id="uploadButtonText">🚀 Request OTP & Upload</span>
+        <span id="uploadButtonLoader" class="loading" style="display:none;"></span>
+      </button>
     </form>
+    
     <div class="otp-field" id="otpField" style="display:none;">
-      <input type="text" id="otpInput" placeholder="Enter OTP" required />
-      <button type="button" id="verifyOtpButton">Verify OTP</button>
+      <h3>📱 Enter Verification Code</h3>
+      <p>We've sent a 6-digit OTP to your email address. Please enter it below:</p>
+      <div class="form-group">
+        <input type="text" id="otpInput" placeholder="Enter 6-digit OTP" maxlength="6" required />
+      </div>
+      <button type="button" id="verifyOtpButton">
+        <span id="verifyButtonText">✅ Verify & Upload File</span>
+        <span id="verifyButtonLoader" class="loading" style="display:none;"></span>
+      </button>
+    </div>
+    
+    <div class="security-note">
+      <strong>🛡️ Security Notice:</strong> Your files are encrypted with AES-256 encryption and automatically expire after 24 hours. Only you can access your files with the OTP sent to your email.
     </div>
   </div>
+  
   <script src="script.js"></script>
 </body>
 </html>
