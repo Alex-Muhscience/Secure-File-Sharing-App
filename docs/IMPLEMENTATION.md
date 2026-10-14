@@ -6,7 +6,7 @@ Completed: validated keys/configuration; independent code/session expiry; crypto
 
 Outstanding release gates: provider-side rotation of previously committed credentials; removal of tracked `.env` and `node_modules` through an index cleanup; legacy code and deployment migration; key rotation and old-file migration; malware quarantine; organizations/quotas; durable outbox; operational backup/restore and monitoring; external security review. The local SMTP service captures mail only.
 
-Verified locally: three core encryption/configuration tests; Mongo-backed lifecycle integration suite; actual SMTP-to-Mailpit sign-in and notification delivery followed by byte-for-byte recipient download, revocation and logout; healthy application/database/mail containers; syntax and whitespace checks. Clean application dependency audit reports zero known vulnerabilities. CI now repeats the tests and live Docker smoke workflow, but remote CI has not been executed in this session.
+Verified locally at the foundation milestone: three core encryption/configuration tests; Mongo-backed lifecycle integration suite; actual SMTP-to-Mailpit sign-in and notification delivery followed by byte-for-byte recipient download, revocation and logout; healthy application/database/mail containers; syntax and whitespace checks. Clean application dependency audit reports zero known vulnerabilities. The subsequent v0.3.0 pilot passed the full [GitHub CI workflow](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/actions/runs/38564171793), including the expanded tests, live Docker smoke, browser checks and backup/restart rehearsal.
 
 ## v0.3.0 local pilot update
 

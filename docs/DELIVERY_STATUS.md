@@ -2,10 +2,12 @@
 
 Version: v0.3.0 local pilot. Scope confirmed by the user: local pilot workflows. The original plan is broader than a repository implementation; external evidence remains a release requirement.
 
+The v0.3.0 implementation passed [GitHub CI](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/actions/runs/38564171793), including clean installation, dependency audit, security/lifecycle/restore tests, Docker startup, real SMTP/ClamAV checks, Chromium workflows and encrypted backup/restart. GitGuardian also passed on [PR #4](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/4).
+
 | Plan phase | Repository status | External acceptance gates |
 | --- | --- | --- |
 | 0: recovery and containment | Functional modules rebuilt; minimal clean dependency graph; Node 24; environment and vendored modules removed from tracking; secret-free deployment template; accurate README | Owners must rotate any real credentials exposed in prior history. History has not been rewritten. Source license ownership must be confirmed. |
-| 1: functional foundation | Implemented and locally verified | Remote CI result after publication |
+| 1: functional foundation | Implemented, locally verified and passed GitHub CI | Production acceptance remains part of phase 3 |
 | 2: private pilot | Organizations, owner/admin/member/viewer roles, recipient grants, revocation, expiry, quotas, quarantine, ClamAV, worker leases/retries, audit export, sandbox entitlement events, usage accounting and usable UI implemented | Design partners must complete representative tasks; real billing provider requires an account and product decisions |
 | 3: enterprise release | Per-file data keys, key IDs/rewrapping, encrypted backup/restore tooling, local restore drill, worker health endpoint, operations/release runbooks and CI gates prepared | Production key service/object storage/identity provider integration; SSO/SCIM as contracted; independent security assessment; production backup/rollback/load drills; paid-pilot/support evidence and procurement approval |
 | 4: scale | Deliberately demand-driven and ongoing | Customer requirements and measured unit economics must justify resumable uploads, regional hosting, APIs and integrations |
