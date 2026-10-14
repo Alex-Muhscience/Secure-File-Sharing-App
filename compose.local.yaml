@@ -1,0 +1,37 @@
+name: secure-transfer-local
+services:
+  preview:
+    build:
+      context: .
+      dockerfile: docker/local/Dockerfile
+    ports:
+      - "127.0.0.1:${LOCAL_PREVIEW_PORT:-3080}:3000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+  mongo:
+    image: mongo:7
+    profiles: [backend-dev]
+    volumes:
+      - mongo-data:/data/db
+    networks: [database]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  mongo-data:
+networks:
+  database:
+    internal: true

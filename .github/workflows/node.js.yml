@@ -1,31 +1,38 @@
-# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
-
-name: Node.js CI
-
+name: Transfer checks
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
-
+    branches: [main]
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
-
+    services:
+      mongo:
+        image: mongo:7
+        ports: [27017:27017]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'quit(db.adminCommand(\"ping\").ok ? 0 : 1)'"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-    - run: npm ci
-    - run: npm run build --if-present
-    - run: npm test
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm run check:secrets
+      - run: npm audit --omit=dev
+      - run: npm test
+      - run: npm run test:integration
+        env:
+          TEST_MONGO_URI: mongodb://127.0.0.1:27017
+      - run: node scripts/init-local.cjs
+      - run: npx playwright install --with-deps chromium
+      - run: docker compose --env-file /dev/null -f compose.app.yaml up -d --build --wait
+      - run: docker compose --env-file /dev/null -f compose.app.yaml exec -T app node < scripts/smoke.cjs
+      - run: npm run test:browser
+      - run: bash scripts/backup-local.sh
+      - if: always()
+        run: docker compose --env-file /dev/null -f compose.app.yaml down

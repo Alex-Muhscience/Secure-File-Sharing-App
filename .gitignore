@@ -64,3 +64,23 @@ ehthumbs.db
 # Temporary files
 tmp/
 temp/
+data/
+
+# Any environment variant except the credential-free example
+.env.*
+!.env.example
+
+# Local security configuration, keys and recovery artifacts
+secrets/
+keyrings/
+backups/
+restore/
+*.key
+*.pem
+.aws/
+.codex/
+.agents/
+
+# Browser artifacts can contain recipient details
+playwright-report/
+test-results/

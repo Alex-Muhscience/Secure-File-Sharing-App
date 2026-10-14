@@ -1,0 +1,113 @@
+name: secure-transfer-app
+services:
+  app:
+    build: .
+    env_file: .env.local
+    environment:
+      PORT: 3000
+      HOST: 0.0.0.0
+      MONGO_URI: mongodb://mongo:27017/secure_transfer
+      SMTP_HOST: mail
+      SMTP_PORT: 1025
+      APP_URL: http://localhost:3081
+      STORAGE_DIR: /app/data/objects
+      SCANNER_HOST: scanner
+      BILLING_SANDBOX: "true"
+    ports: ["127.0.0.1:3081:3000"]
+    volumes: ["objects:/app/data"]
+    depends_on:
+      mongo: {condition: service_healthy}
+      mail: {condition: service_healthy}
+    networks: [backend, edge]
+    read_only: true
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    mem_limit: 512m
+    pids_limit: 128
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  mongo:
+    image: mongo:7
+    volumes: ["database:/data/db"]
+    networks: [backend]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "quit(db.adminCommand('ping').ok?0:1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  worker:
+    build: .
+    env_file: .env.local
+    environment:
+      MONGO_URI: mongodb://mongo:27017/secure_transfer
+      SMTP_HOST: mail
+      SMTP_PORT: 1025
+      APP_URL: http://localhost:3081
+      STORAGE_DIR: /app/data/objects
+      SCANNER_HOST: scanner
+      WORKER_ONLY: "true"
+    volumes: ["objects:/app/data"]
+    networks: [backend]
+    depends_on:
+      mongo: {condition: service_healthy}
+      scanner: {condition: service_healthy}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    mem_limit: 512m
+    restart: unless-stopped
+  scanner:
+    image: clamav/clamav:1.5.4
+    environment:
+      CLAMD_CONF_StreamMaxLength: 25M
+      CLAMD_CONF_MaxFileSize: 25M
+      CLAMD_CONF_MaxScanSize: 50M
+      CLAMD_CONF_MaxScanTime: "10000"
+      CLAMD_CONF_MaxRecursion: "10"
+      CLAMD_CONF_MaxFiles: "500"
+      CLAMD_CONF_AlertExceedsMax: "yes"
+      CLAMD_CONF_AlertEncryptedArchive: "yes"
+      CLAMD_CONF_AlertEncryptedDoc: "yes"
+      CLAMD_CONF_EnableShutdownCommand: "no"
+    tmpfs: ["/tmp:size=128m,mode=1777"]
+    volumes: ["signatures:/var/lib/clamav"]
+    networks: [backend, edge]
+    mem_limit: 2g
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, clamdscan, --ping=1]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+  mail:
+    image: axllent/mailpit:v1.27
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 200
+    ports: ["127.0.0.1:8025:8025"]
+    volumes: ["mail:/data"]
+    networks: [backend, edge]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, /mailpit, readyz]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  objects:
+  database:
+  mail:
+  signatures:
+networks:
+  backend:
+    internal: true
+  edge:
