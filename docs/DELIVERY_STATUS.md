@@ -1,6 +1,6 @@
 # Delivery status
 
-Version: v0.4.0 local pilot (PR validation in progress). Scope confirmed by the user: local pilot workflows. The original plan is broader than a repository implementation; external evidence remains a release requirement.
+Version: v0.4.0 local pilot. Scope confirmed by the user: local pilot workflows. The original plan is broader than a repository implementation; external evidence remains a release requirement.
 
 The v0.3.0 implementation passed [GitHub CI](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/actions/runs/38564171793), including clean installation, dependency audit, security/lifecycle/restore tests, Docker startup, real SMTP/ClamAV checks, Chromium workflows and encrypted backup/restart. GitGuardian also passed on [PR #4](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/4).
 
@@ -33,4 +33,4 @@ Local MongoDB is unauthenticated and private to the Docker network. Default stor
 
 Implemented in [PR #5](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/5): configurable private S3 storage with a local Garage stack; a shared storage boundary for upload, scanning, download, cleanup and backups; verified/resumable ciphertext migration preserving existing data; restore support for either backend; workspace authorization and quota race fixes; local and CI coverage; updated setup and recovery documentation. Existing production/customer acceptance gates still apply.
 
-Local validation passes: three core tests; all five database/S3 integration suites without skips; live filesystem and S3 SMTP/ClamAV clean/EICAR workflows; Chromium workspace/member/recipient/export/revocation checks in both modes; encrypted snapshots with automatic stack selection and healthy restart. Migration, reversal, destination conflicts and restores to both backends pass against real Garage. Production dependency audit reports zero known vulnerabilities. Remote PR checks are pending publication of the implementation commit.
+Local validation passes: three core tests; all five database/S3 integration suites without skips; live filesystem and S3 SMTP/ClamAV clean/EICAR workflows; Chromium workspace/member/recipient/export/revocation checks in both modes; encrypted snapshots with automatic stack selection and healthy restart. Migration, reversal, destination conflicts and restores to both backends pass against real Garage. Production dependency audit reports zero known vulnerabilities. The [implementation workflow](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/actions/runs/38614579282) and [PR #5 checks](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/5/checks) record remote validation. Passing checks and owner approval are required before merging.
