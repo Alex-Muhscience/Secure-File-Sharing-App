@@ -1,6 +1,6 @@
 {
   "name": "secure-file-sharing-platform",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Email-verified encrypted file transfers",
   "main": "app.js",
@@ -8,14 +8,21 @@
     "start": "node app.js",
     "dev": "node --watch app.js",
     "test": "node --test test/*.test.js",
-    "test:integration": "node --test test/integration.cjs",
-    "check": "node --check app.js && node --check src/app.js && node --check public/script.js"
+    "test:integration": "node --test test/*.cjs",
+    "check": "node scripts/check.cjs",
+    "test:browser": "node test/browser.js",
+    "check:secrets": "node scripts/check-secrets.cjs"
   },
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "dependencies": {
     "express": "^5.1.0",
     "mongodb": "^6.20.0",
     "multer": "^2.4.0",
     "nodemailer": "^10.1.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
   }
 }

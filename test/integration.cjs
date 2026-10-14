@@ -23,7 +23,7 @@ test('Mongo-backed transfer lifecycle, OTP races, authorization, expiry, tamper 
   const config = loadConfig({ ENCRYPTION_KEY: '12'.repeat(32), OTP_SECRET: '34'.repeat(32), MONGO_URI: 'mongodb://mongo/test', SMTP_HOST: 'mail', MAX_FILE_SIZE: '1024' });
   config.storage = directory;
   await initialize(db); const storage = new Storage(config); await storage.init();
-  const dependencies = { config, db, storage, mail: { async sendMail(message) { sent.push(message); } } };
+  const dependencies = { config, db, storage, scanner: { async scan() { return { clean: true }; } }, mail: { async sendMail(message) { sent.push(message); } } };
   let running = createApp(dependencies);
   server = running.app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
@@ -63,6 +63,8 @@ test('Mongo-backed transfer lifecycle, OTP races, authorization, expiry, tamper 
   };
   assert.equal((await request('/api/files')).status, 401);
   const uploaded = await upload(); assert.equal(uploaded.status, 201); const { fileId } = await uploaded.json();
+  assert.equal((await request(`/api/file/${fileId}/download`, recipient)).status, 404);
+  await running.worker.tick();
   assert.equal((await request(`/api/file/${fileId}/download`, stranger)).status, 404);
   assert.equal((await request(`/api/file/${fileId}`, recipient, 'DELETE')).status, 404);
   assert.equal((await (await request('/api/files', stranger)).json()).files.length, 0);

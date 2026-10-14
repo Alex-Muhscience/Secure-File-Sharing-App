@@ -8,20 +8,26 @@ async function main() {
   const config = loadConfig();
   const client = new MongoClient(config.mongoUri, { serverSelectionTimeoutMS: 5000 });
   await client.connect();
-  const db = client.db();
-  await initialize(db);
+  const db = client.db(); await initialize(db);
   const storage = new Storage(config); await storage.init();
-  const mail = nodemailer.createTransport(config.smtp); await mail.verify();
-  const { app, cleanup } = createApp({ config, db, storage, mail });
-  await cleanup();
-  const server = app.listen(config.port, config.host, () => console.log(`Secure Transfer listening on port ${config.port}`));
-  server.requestTimeout = 120000;
-  const timer = setInterval(() => cleanup().catch(error => console.error('Cleanup failed:', error.name)), 60000);
-  let closing = false;
+  const mail = nodemailer.createTransport(config.smtp);
+  if (!config.workerOnly) await mail.verify();
+  const { app, cleanup, worker, pilot } = createApp({ config, db, storage, mail });
+  await pilot.migrate();
+  const server = config.workerOnly ? null : app.listen(config.port, config.host, () => console.log(`Secure Transfer listening on port ${config.port}`));
+  if (server) server.requestTimeout = 120000;
+  let timer, closing = false, activeTick = Promise.resolve();
+  const tick = () => {
+    activeTick = worker.tick().then(cleanup).catch(error => console.error('Worker failed:', error.name));
+    activeTick.finally(() => { if (!closing) timer = setTimeout(tick, 2000); });
+  };
+  if (config.workerOnly) { console.log('Transfer worker started'); tick(); }
   const shutdown = () => {
-    if (closing) return; closing = true; clearInterval(timer);
+    if (closing) return; closing = true; clearTimeout(timer);
     const timeout = setTimeout(() => process.exit(1), 15000); timeout.unref();
-    server.close(async () => { mail.close(); await client.close(); clearTimeout(timeout); });
+    const finish = async () => { await activeTick; mail.close(); await client.close(); clearTimeout(timeout); };
+    if (server) server.close(() => finish().catch(() => process.exit(1)));
+    else finish().catch(() => process.exit(1));
   };
   process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);
 }

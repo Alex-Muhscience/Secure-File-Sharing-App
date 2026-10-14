@@ -7,6 +7,11 @@ async function initialize(db) {
     db.collection('transfers').createIndex({ owner: 1, createdAt: -1 }),
     db.collection('transfers').createIndex({ recipient: 1, createdAt: -1 }),
     db.collection('transfers').createIndex({ expiresAt: 1, status: 1 }),
+    db.collection('transfers').createIndex({ orgId: 1, status: 1 }),
+    db.collection('organizations').createIndex({ 'members.email': 1 }),
+    db.collection('audit').createIndex({ orgId: 1, _id: 1 }),
+    db.collection('usage').createIndex({ orgId: 1, at: -1 }),
+    db.collection('workers').createIndex({ heartbeat: 1 }, { expireAfterSeconds: 86400 }),
   ]);
 }
 module.exports = { initialize };

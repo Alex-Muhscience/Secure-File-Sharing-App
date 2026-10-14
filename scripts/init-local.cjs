@@ -7,3 +7,9 @@ try {
   if (error.code !== 'EEXIST') throw error;
   console.log('.env.local already exists; existing keys preserved.');
 }
+const contents = fs.readFileSync('.env.local', 'utf8');
+if (!/^BACKUP_KEY=/m.test(contents)) {
+  fs.appendFileSync('.env.local', `${contents.endsWith('\n') ? '' : '\n'}BACKUP_KEY=${crypto.randomBytes(32).toString('hex')}\n`);
+  fs.chmodSync('.env.local', 0o600);
+  console.log('Added an independent backup key; existing keys preserved.');
+}

@@ -1,68 +1,85 @@
-# Secure Transfer
+# Secure Transfer — v0.3.0 local pilot
 
-A working local file-transfer foundation built with Node 24, Express, MongoDB and local email capture. Senders and recipients sign in using email codes. Files stream into AES-256-GCM encrypted storage; only the sender and designated recipient can download them. Senders can revoke access, and a retryable cleanup loop deletes revoked or expired objects.
+Email-verified, encrypted file transfers with team workspaces, role-based access, recipient grants, storage quotas, malware quarantine, retryable notifications, activity export and local billing simulation. Built with Node 24, Express, MongoDB and ClamAV. This is a verified local pilot, not an enterprise production release.
 
-## Run locally
+## Start
 
-Requires Docker Compose and Node 24 to generate local keys:
+Requires Docker Compose and Node 24. ClamAV's signature database requires an initial image download and roughly 2 GB of scanner memory.
 
 ```bash
 node scripts/init-local.cjs
 docker compose --env-file /dev/null -f compose.app.yaml up -d --build --wait
 ```
 
-Open **http://localhost:3081**. Verification codes and recipient notifications appear in the local inbox at **http://localhost:8025**. This stack does not send email to external addresses. The older disabled preview remains separately available on port 3080 if running.
+Open **http://localhost:3081**. Email codes and recipient notifications appear at **http://localhost:8025**; this stack does not email external addresses. Keep `.env.local` and the named volumes to preserve your keys and data. The legacy tracked `.env` is no longer loaded or tracked; its prior history still requires provider-side rotation if it contained live credentials.
 
-1. Enter a sender email, request a code, and retrieve it from the inbox.
-2. Verify the code, select a file up to 10 MB, enter the recipient email, and choose an expiry.
-3. Copy the recipient link or open it from the inbox. In a separate tab, sign in as the recipient to download.
-4. Use “Revoke and delete” as the sender to remove access immediately. Cleanup runs every minute.
+1. Sign in using an email and the code from the local inbox.
+2. Use your personal workspace or create a team. Owners can add administrators, members or viewers. Invited users sign in with their own email and select the workspace.
+3. Upload a file up to 10 MB, designate a recipient, and set an expiry. The encrypted file stays quarantined until ClamAV releases it. The worker then emails the recipient with retries if delivery fails.
+4. The recipient signs in to download. Owners/admins can manage workspace transfers; members manage their own files; viewers cannot upload or revoke.
+5. Review usage, export workspace activity, or simulate a plan in team settings. Sandbox plan changes collect no payments.
+
+The UI refreshes transfer status every five seconds. Password-protected or excessive archives/documents are blocked by scanner policy. A scan error never releases a file. Malware scanning reduces risk but cannot guarantee a file is safe.
+
+Pilot plan: 100 MB, 100 files, 5 seats. Team sandbox plan: 1 GB, 1,000 files, 25 seats. Each transfer reserves capacity atomically; failed uploads and completed deletion return it. Personal workspaces and up to three team workspaces per owner are supported. Plan sizes are local test entitlements, not validated commercial pricing.
 
 ```bash
-docker compose --env-file /dev/null -f compose.app.yaml logs --tail=100 app
+docker compose --env-file /dev/null -f compose.app.yaml logs --tail=100 app worker scanner
 docker compose --env-file /dev/null -f compose.app.yaml down
 ```
 
-Named volumes preserve MongoDB, ciphertext and captured email. Keep `.env.local`: its encryption key is needed for existing uploads. Do not regenerate keys while retaining files. The application deliberately does not load the legacy tracked `.env`.
+`down` preserves named volumes. The historical preview on 3080 is separate; use 3081 for the working application.
 
-## Verify
+## Verification
 
 ```bash
 npm ci --ignore-scripts
 npm run check
+npm run check:secrets
 npm test
 TEST_MONGO_URI=mongodb://127.0.0.1:27017 npm run test:integration
 ```
 
-The integration test uses a uniquely named disposable database and removes it afterward. It verifies sender/recipient downloads, unauthorized access denial, OTP replay and concurrent consumption, attempt limits, oversized upload cleanup, ciphertext corruption, restart persistence, expiry, revocation and deletion retries. The local Compose database has no host port. To test against it, run:
+The Compose MongoDB service has no host port. To test it using the app image:
 
 ```bash
-docker compose --env-file /dev/null -f compose.app.yaml run --rm --no-deps --user root -v "$PWD/test:/app/test:ro" -e TEST_MONGO_URI=mongodb://mongo:27017 app npm run test:integration
+docker compose --env-file /dev/null -f compose.app.yaml run --rm --no-deps --user root \
+  -v "$PWD/test:/app/test:ro" -e TEST_MONGO_URI=mongodb://mongo:27017 app npm run test:integration
 docker compose --env-file /dev/null -f compose.app.yaml exec -T app node < scripts/smoke.cjs
+npx playwright install chromium
+npm run test:browser
 ```
+
+Tests create uniquely named disposable databases and remove them afterward. Coverage includes OTP replay/races/expiry/attempts, tenant isolation, role restrictions, quota contention, scanner and SMTP outages, worker replacement/leases, sandbox event idempotency, encryption/key rotation/tampering, deletion retries, restart persistence, encrypted backup restore and corruption rejection. The smoke workflow tests real ClamAV with the harmless EICAR fixture. Chromium checks workspace creation, safe filename rendering, viewer access, recipient downloads, audit export and revocation. Browser artifacts are ignored by Git.
 
 ## API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/health` | Process liveness |
-| GET | `/ready` | Database and storage readiness |
+| GET | `/health`, `/ready` | Liveness and database/storage readiness |
 | POST | `/api/request-otp` | `{email}` → challenge `sessionId` |
 | POST | `/api/verify-otp` | `{sessionId, otp}` → session `token` |
 | POST | `/api/logout` | Revoke current session |
+| GET / POST | `/api/organizations` | List / create workspaces |
+| PUT | `/api/organizations/:id/members` | Add/update `{email, role}` |
+| DELETE | `/api/organizations/:id/members/:email` | Remove member and recipient grants |
 | POST | `/api/upload` | Multipart `file`, `recipient`, `expiryHours` |
-| GET | `/api/files` | Up to 100 sender/recipient records |
-| GET | `/api/file/:id/download` | Authenticated attachment download |
-| DELETE | `/api/file/:id` | Owner revocation and queued deletion |
+| GET | `/api/files` | Recent authorized transfer records |
+| GET | `/api/file/:id/download` | Authenticated attachment after scanning |
+| DELETE | `/api/file/:id` | Revoke access and queue deletion |
+| GET | `/api/usage` | Quota and recent usage records |
+| GET | `/api/audit/export` | Admin-only NDJSON activity export, cursor pagination |
+| GET | `/api/operations` | Admin-only worker/backlog status |
+| POST | `/api/billing/sandbox/events` | Owner-only simulated `{eventId, plan, status}` |
 
-Protected calls require `Authorization: Bearer <token>`. Tokens are random opaque secrets, stored as hashes in MongoDB, and expire after one hour. The browser keeps its token in memory; reloading requires signing in again. Codes expire after ten minutes, allow five verification attempts, and can be consumed once. Requesting a replacement invalidates the old challenge. Rate limits are shared through MongoDB and fail closed when the database is unavailable.
+Protected requests require `Authorization: Bearer <token>`. `X-Organization-ID` selects a workspace; omission selects the personal workspace. `X-File-Size` allows exact upload quota reservation and enforces the declared size as a streaming limit; omitting it reserves the maximum file size. A recipient grant permits access across workspaces, while tenant administration never permits access to another organization's files.
 
-## Security model and current limits
+Tokens are opaque random secrets stored as hashes and expire after one hour. Browser tokens stay in memory. Codes expire after ten minutes, allow five attempts, and can be consumed once. MongoDB stores shared rate-limit counters. Download usage records represent authorized download attempts, not proof of complete client receipt. SMTP delivery is at-least-once.
 
-This is a local development foundation, **not an enterprise production release**. Encryption uses a server-held key; server operators can decrypt files. No plaintext files are written to disk. Download plaintext is buffered in memory until authentication completes, with a 10 MB default file limit and four concurrent transfers per process. Existing legacy CBC files are not migrated or readable by this implementation.
+## Security and operations
 
-MongoDB is isolated on an internal Docker network without a host port, with no authentication for this local-only stack. The app and mail inbox bind to loopback. Deployment to other environments requires authenticated services, HTTPS, secret management, backups, and security review. Existing secrets in Git history require provider-side rotation by their owners.
+Uploads stream directly into ciphertext storage. Each file has a random AES-256-GCM data key wrapped by a versioned server key. Download plaintext is bounded in memory until authentication completes. The app defaults to 10 MB/file and four concurrent transfers/process. ClamAV may extract plaintext into its memory-backed temporary directory during inspection. Server operators can decrypt files; this is not end-to-end encryption.
 
-Malware scanning, tenant organizations, durable notification retries, cumulative storage quotas, SSO, billing, production key rotation, resumable transfers and external audit export remain future work. Downloads already sent cannot be recalled. Revocation prevents new download authorization but cannot retract an in-progress response. Expiry denies new downloads even if the cleanup worker is temporarily unavailable. Audit records currently have no automatic retention policy. Deleted transfer metadata remains for lifecycle tracking.
+Only the app and email inbox have loopback host ports. Local MongoDB is unauthenticated on a private Docker network. Data is stored on one persistent volume; production object storage, managed KMS, HTTPS/authenticated infrastructure, identity-provider SSO and real payment integration are not implemented. Retain all necessary historical keys for backups. The original CBC prototype is not automatically migrated.
 
-The historical audit and broader delivery plan are in [ENTERPRISE_AUDIT_AND_PLAN.md](ENTERPRISE_AUDIT_AND_PLAN.md). Legacy `models/`, `middleware/`, `utils.js`, deployment templates and preview assets are not loaded by the current app; they remain pending removal or migration. The old README's Web3 and enterprise claims no longer describe the implemented product.
+See [operations and recovery](docs/OPERATIONS.md), [delivery status](docs/DELIVERY_STATUS.md) and the [historical audit](ENTERPRISE_AUDIT_AND_PLAN.md). The release plan's customer validation, credential rotation, external security review, production recovery/load tests, commercial evidence and demand-driven scale work remain external gates. Legacy models/middleware/utils and the old Docker deployment are unused by the current app and retained only as historical migration references.

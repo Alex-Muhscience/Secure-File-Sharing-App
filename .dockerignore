@@ -10,5 +10,13 @@ data
 .aws
 .agents
 .codex
+backups
+restore
+secrets
+keyrings
+*.key
+*.pem
 coverage
 *.log
+playwright-report
+test-results

@@ -22,13 +22,17 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run check
+      - run: npm run check:secrets
       - run: npm audit --omit=dev
       - run: npm test
       - run: npm run test:integration
         env:
           TEST_MONGO_URI: mongodb://127.0.0.1:27017
       - run: node scripts/init-local.cjs
+      - run: npx playwright install --with-deps chromium
       - run: docker compose --env-file /dev/null -f compose.app.yaml up -d --build --wait
       - run: docker compose --env-file /dev/null -f compose.app.yaml exec -T app node < scripts/smoke.cjs
+      - run: npm run test:browser
+      - run: bash scripts/backup-local.sh
       - if: always()
         run: docker compose --env-file /dev/null -f compose.app.yaml down

@@ -7,9 +7,16 @@
 <section id="signin"><h2>Sign in with email</h2><form id="request-form"><label for="email">Your email</label><input id="email" type="email" autocomplete="email" required><button>Send verification code</button></form>
 <form id="verify-form" hidden><label for="code">Six-digit code</label><input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required><button>Verify and sign in</button></form><p class="hint">For this local stack, open <a href="http://localhost:8025" target="_blank" rel="noreferrer">the email inbox</a> to find your code.</p></section>
 <section id="workspace" hidden><div class="row"><h2 id="identity"></h2><button id="logout" class="secondary">Sign out</button></div>
+<label for="organization">Workspace</label><select id="organization"></select><p id="usage-summary"></p>
+<form id="create-org-form"><label for="org-name">New team workspace</label><input id="org-name" maxlength="80" required><button>Create workspace</button></form>
+<details id="team-controls"><summary>Team and workspace settings</summary><div id="members"></div>
+<form id="member-form"><label for="member-email">Member email</label><input id="member-email" type="email" required><label for="member-role">Role</label><select id="member-role"><option value="member">Member</option><option value="viewer">Viewer</option><option value="admin">Administrator</option></select><button>Add or update member</button></form>
+<button id="audit-export" class="secondary">Export activity</button>
+<form id="sandbox-form"><p>Local billing sandbox — no payments are collected.</p><label for="sandbox-plan">Simulate plan</label><select id="sandbox-plan"><option value="pilot">Pilot: 100 MB, 5 seats</option><option value="team">Team: 1 GB, 25 seats</option></select><button>Apply sandbox plan</button></form></details>
 <p id="shared-message" hidden></p>
 <form id="upload-form"><label for="file">File (up to 10 MB)</label><input id="file" type="file" required><label for="recipient">Recipient email</label><input id="recipient" type="email" required><label for="expiry">Expires after</label><select id="expiry"><option value="1">1 hour</option><option value="24" selected>24 hours</option><option value="72">3 days</option><option value="168">7 days</option></select><button>Encrypt and share</button></form>
 <div id="share-result" hidden><label for="share-link">Recipient link</label><input id="share-link" readonly><button id="copy" class="secondary">Copy link</button><p>The recipient must sign in with the email you specified.</p></div>
+<progress id="upload-progress" hidden aria-label="Uploading file"></progress><button id="cancel-upload" type="button" class="secondary" hidden>Cancel upload</button>
 <div class="row"><h2>Your transfers</h2><button id="refresh" class="secondary">Refresh</button></div><div id="files"></div></section>
-<footer>Files use server-managed encryption. This server can decrypt them. This development build has no malware scanning; only download files from people you trust.</footer>
+<footer>Files use server-managed encryption. This server can decrypt them. Downloads become available after malware scanning. This is a local pilot build; only download files from people you trust.</footer>
 </main></body></html>

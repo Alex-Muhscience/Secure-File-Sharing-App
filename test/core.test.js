@@ -26,8 +26,14 @@ test('streamed encrypted storage preserves bytes and rejects tampering, metadata
   assert.notDeepEqual(await fs.readFile(storage.objectPath(stored.objectId)), bytes);
   assert.equal((await fs.stat(storage.objectPath(stored.objectId))).mode & 0o777, 0o600);
   await assert.rejects(storage.decrypt({ ...stored, tag: '00'.repeat(16) }));
-  const wrong = new Storage({ ...storage.config, key: crypto.randomBytes(32) });
+  const wrong = new Storage({ ...storage.config, keys: { legacy: crypto.randomBytes(32) } });
   await assert.rejects(wrong.decrypt(stored));
+  const rotated = new Storage({ ...storage.config, keys: { ...storage.config.keys, current: crypto.randomBytes(32) }, keyId: 'current' });
+  const rewrapped = { ...stored, ...rotated.rewrap(stored) };
+  const retired = new Storage({ ...rotated.config, keys: { current: rotated.config.keys.current } });
+  assert.deepEqual(await retired.decrypt(rewrapped), bytes);
+  await assert.rejects(retired.decrypt(stored));
+  await assert.rejects(storage.decrypt({ ...stored, wrappingTag: '00'.repeat(16) }));
   const ciphertext = await fs.readFile(storage.objectPath(stored.objectId)); ciphertext[0] ^= 1;
   await fs.writeFile(storage.objectPath(stored.objectId), ciphertext);
   await assert.rejects(storage.decrypt(stored));
