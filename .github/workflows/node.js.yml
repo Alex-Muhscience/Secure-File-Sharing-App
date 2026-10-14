@@ -34,5 +34,16 @@ jobs:
       - run: docker compose --env-file /dev/null -f compose.app.yaml exec -T app node < scripts/smoke.cjs
       - run: npm run test:browser
       - run: bash scripts/backup-local.sh
+      - run: node scripts/init-s3.cjs
+      - run: docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml up -d --build --wait
+      - run: docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml run --rm --no-deps --user root -v "$PWD/test:/app/test:ro" -e TEST_MONGO_URI=mongodb://mongo:27017 -e TEST_S3=true app node --test test/s3.cjs
+      - run: docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml exec -T app node < scripts/smoke.cjs
+      - run: npm run test:browser
+      - run: bash scripts/backup-local.sh s3
       - if: always()
-        run: docker compose --env-file /dev/null -f compose.app.yaml down
+        run: |
+          if [ -f .env.s3 ]; then
+            docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml down
+          else
+            docker compose --env-file /dev/null -f compose.app.yaml down
+          fi

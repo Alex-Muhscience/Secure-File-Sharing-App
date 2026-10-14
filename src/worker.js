@@ -17,6 +17,7 @@ class Worker {
             { $or: [{ scanLeaseUntil: { $exists: false } }, { scanLeaseUntil: { $lte: now } }] }],
         }, { $set: { scanLease: lease, scanLeaseUntil: new Date(+now + 120000) }, $inc: { scanAttempts: 1 } }, { returnDocument: 'after' });
         if (!file) break;
+        await this.db.collection('workers').updateOne({ _id: this.id }, { $set: { heartbeat: new Date() } });
         try {
           const result = await this.scanner.scan(await this.storage.decrypt(file));
           const update = await this.transfers.updateOne({ _id: file._id, status: 'quarantined', scanLease: lease }, {
@@ -35,6 +36,7 @@ class Worker {
           'notification.nextAttempt': { $lte: now }, $or: [{ 'notification.leaseUntil': { $exists: false } }, { 'notification.leaseUntil': { $lte: now } }],
         }, { $set: { 'notification.lease': lease, 'notification.leaseUntil': new Date(+now + 60000) }, $inc: { 'notification.attempts': 1 } }, { returnDocument: 'after' });
         if (!file) break;
+        await this.db.collection('workers').updateOne({ _id: this.id }, { $set: { heartbeat: new Date() } });
         try {
           await this.mail.sendMail({ from: this.config.from, to: file.recipient, messageId: `<transfer-${file._id}@secure-transfer.local>`,
             subject: 'A file has been shared with you', text: `${file.owner} shared ${file.name}. Sign in with this email to download: ${this.config.baseUrl}/?transfer=${file._id}\nExpires: ${file.expiresAt.toISOString()}` });

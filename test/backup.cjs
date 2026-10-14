@@ -18,7 +18,7 @@ test('encrypted backup restore preserves metadata and bytes, excludes sessions a
   const client = new MongoClient(uri), name = `backup_${crypto.randomBytes(6).toString('hex')}`, restored = `restore_${name}`, corruptDb = `restore_bad_${name}`;
   t.after(async () => { await client.db(name).dropDatabase(); await client.db(restored).dropDatabase(); await client.db(corruptDb).dropDatabase(); await client.close(); await fs.rm(directory, { recursive: true, force: true }); });
   await client.connect(); const db = client.db(name), source = path.join(directory, 'source'), target = path.join(directory, 'restored');
-  const env = { ...process.env, ENCRYPTION_KEY: '12'.repeat(32), OTP_SECRET: '34'.repeat(32), BACKUP_KEY: '56'.repeat(32), SMTP_HOST: 'mail', STORAGE_DIR: source };
+  const env = { ...process.env, STORAGE_DRIVER: 'filesystem', S3_ENDPOINT: '', ENCRYPTION_KEY: '12'.repeat(32), OTP_SECRET: '34'.repeat(32), BACKUP_KEY: '56'.repeat(32), SMTP_HOST: 'mail', STORAGE_DIR: source };
   const sourceUri = new URL(uri); sourceUri.pathname = `/${name}`; env.MONGO_URI = sourceUri.toString();
   const config = loadConfig(env), storage = new Storage(config); await storage.init();
   const bytes = crypto.randomBytes(65536);

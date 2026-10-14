@@ -10,7 +10,7 @@ If downloads stay quarantined, check scanner health, signature updates and worke
 
 Run `bash scripts/backup-local.sh`. It stops application and worker writes, creates an authenticated encrypted archive under ignored `backups/`, and restarts the services. Metadata, organizations, usage/audit history and encrypted objects are included. Tokens and OTP challenges are excluded. Protect and separately back up `.env.local`, including `BACKUP_KEY` and all retained encryption keys. Losing the keys makes the archive or files unreadable. Snapshot retention/offsite copies require an operator policy; this script is not a scheduled offsite backup service.
 
-Restore only into a **new** database prefixed `restore_` and an empty storage directory. Example local drill:
+Restore only into a **new** database prefixed `restore_` and an empty storage destination. Example filesystem drill:
 
 ```bash
 docker compose --env-file /dev/null -f compose.app.yaml run --rm --no-deps --user root \
@@ -34,6 +34,34 @@ The rotation command authenticates each current object and rewraps its data key.
 
 ## Release and rollback
 
-CI requires syntax, core tests, Mongo-backed security/lifecycle/restore tests, clean dependency audit, image build, live SMTP/ClamAV smoke and browser checks. Release only reviewed commits with version tags. Preserve the image digest, `.env.local`, archive, and current schema before changes. For this local v0.3.0 pilot, rollback requires a compatible database/storage snapshot and retained keys: v0.2.0 does not understand new wrapped-key files or quarantine states. Do not run the old image against the migrated database. Restore into a new destination and validate downloads before changing runtime pointers.
+CI requires syntax, core tests, Mongo-backed security/lifecycle/restore tests, clean dependency audit, image build, live SMTP/ClamAV smoke and browser checks for filesystem and S3 storage. Release only reviewed commits with version tags. Preserve the image digest, `.env.local`, `.env.s3` and Garage configuration when applicable, archive, and current schema before changes. Rollback requires compatible database/storage snapshots and retained keys: v0.2.0 does not understand wrapped-key files or quarantine states, and v0.3.0 does not understand S3 references. Do not run an old image against an incompatible database. Restore into a new destination and validate downloads before changing runtime pointers.
 
 Before external deployment: rotate exposed provider credentials, use authenticated services and HTTPS, integrate managed keys/object storage, rehearse actual infrastructure recovery/rollback, measure load under an agreed profile, establish alerting and support ownership, and obtain independent security review. `Deployment.yaml` is a single-instance app template; it does not provision a production worker/scanner/database or secrets.
+
+## Private S3 storage and migration (v0.4.0)
+
+The default stack still uses filesystem storage. To add the private local Garage service, generate ignored S3 credentials and configuration, then use the S3 overlay:
+
+```bash
+node scripts/init-s3.cjs
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml up -d --build --wait
+```
+
+Garage's S3, administration and RPC ports have no host bindings. The single-node development service stores ciphertext on its own persistent volume. It has no replica redundancy. Production storage requires an operator-managed private bucket, authenticated TLS endpoints and reviewed access/backup policies. The adapter uses explicit configured credentials and does not use ambient AWS profiles.
+
+Old transfers continue to read from their filesystem backend. A migration authenticates the source, copies ciphertext, verifies identical destination bytes and authentication, then changes the transfer's backend. A conflicting destination aborts the migration. Rerunning skips completed records. Source copies remain tracked and are deleted with the transfer; keep the original filesystem volume accessible while these retained references exist. Startup and readiness check every backend required by active transfer metadata. Storage endpoint, bucket, prefix and the original filesystem path must stay stable for their referenced objects.
+
+For a maintenance migration, take a snapshot, pause app/worker writes, and run one migration process at a time:
+
+```bash
+bash scripts/backup-local.sh
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml stop app worker
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml run --rm --no-deps app node scripts/migrate-storage.cjs s3
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml up -d --wait app worker
+```
+
+To reverse, use `filesystem` as the migration target while S3 remains configured. Set `STORAGE_DRIVER=filesystem` in ignored `.env.s3` and retain the overlay until all S3 references/copies have expired or been deleted. Running the base stack alone while live S3 references exist fails startup rather than pretending storage is ready. Verified retained copies require their original backing store for deletion, so this compatibility period does not yet remove every shared-volume dependency. After old transfers expire, a fully S3 deployment can use independent writable scratch directories for the otherwise unused filesystem fallback.
+
+`backup-local.sh` detects whether the running app has S3 configured and resumes that same stack, including after reverse migration to filesystem storage. An explicit `s3` or `filesystem` stack argument is required when the app is stopped; use `s3` whenever the S3 overlay is still needed. Archives contain ciphertext from either backend and restore each transfer into the selected destination backend, without carrying source-copy references into the restored database. Restore targets must be empty. To restore to S3, use an empty bucket/prefix and the S3 overlay; do not reuse a live application's object prefix. Keep `.env.s3` and `secrets/garage.toml` with the protected operational configuration so the existing Garage volume remains accessible.
+
+The SDK uses multipart upload with one buffered 5 MB part per upload. Interrupted multipart jobs are aborted; the worker also sweeps abandoned multipart uploads older than one hour. Ciphertext listing/orphan reconciliation runs every minute, rather than every queue tick. API downloads still authenticate the full bounded object before releasing plaintext. AWS SDK optional checksums are configured for S3 compatibility; AES-GCM remains mandatory for file authentication.

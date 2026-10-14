@@ -29,7 +29,7 @@ async function main() {
           yield JSON.stringify({ type: 'record', collection, record: BSON.EJSON.serialize(record) }) + '\n';
         }
         for await (const file of db.collection('transfers').find({ status: { $ne: 'deleted' } })) {
-          const bytes = await fsp.readFile(storage.objectPath(file.objectId));
+          const bytes = await storage.readCiphertext(file);
           yield JSON.stringify({ type: 'object', objectId: file.objectId, bytes: bytes.toString('base64') }) + '\n';
         }
       }
@@ -57,22 +57,24 @@ async function main() {
       const sink = new Transform({ transform(chunk, encoding, cb) { cb(); } });
       await pipeline(fs.createReadStream(archive, { start: 17, end: stat.size - 17 }), decipher(), sink);
       await storage.init();
-      if ((await fsp.readdir(config.storage)).length) throw new Error('Restore storage directory must be empty');
+      for await (const object of storage.list(true)) { throw new Error('Restore storage destination must be empty'); }
       const plaintext = fs.createReadStream(archive, { start: 17, end: stat.size - 17 }).pipe(decipher());
       const lines = readline.createInterface({ input: plaintext, crlfDelay: Infinity });
       for await (const line of lines) {
         const entry = JSON.parse(line);
         if (entry.type === 'record') {
           if (!collections.includes(entry.collection)) throw new Error('Invalid backup collection');
-          await db.collection(entry.collection).insertOne(BSON.EJSON.deserialize(entry.record));
+          const record = BSON.EJSON.deserialize(entry.record);
+          if (entry.collection === 'transfers') { record.storageBackend = storage.driver; delete record.retainedBackends; }
+          await db.collection(entry.collection).insertOne(record);
         } else if (entry.type === 'object') {
-          await fsp.writeFile(storage.objectPath(entry.objectId), Buffer.from(entry.bytes, 'base64'), { flag: 'wx', mode: 0o600 });
+          await storage.importCiphertext(entry.objectId, Buffer.from(entry.bytes, 'base64'));
         } else if (entry.type !== 'manifest' || entry.version !== 1) throw new Error('Invalid backup manifest');
       }
       await initialize(db);
       for await (const file of db.collection('transfers').find({ status: { $ne: 'deleted' } })) await storage.decrypt(file);
       console.log(`Restore verified in ${destination}; sessions were deliberately excluded.`);
     }
-  } finally { await client.close(); if (partial) await fsp.rm(partial, { force: true }); }
+  } finally { storage.close(); await client.close(); if (partial) await fsp.rm(partial, { force: true }); }
 }
 main().catch(error => { console.error('Backup operation failed:', error.message); process.exitCode = 1; });

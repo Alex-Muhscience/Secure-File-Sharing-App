@@ -17,7 +17,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
       containers:
         - name: app
-          image: secure-transfer:0.3.0
+          image: secure-transfer:0.4.0
           ports: [{containerPort: 3000}]
           envFrom: [{secretRef: {name: app-secrets}}]
           env:

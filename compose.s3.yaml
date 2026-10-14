@@ -1,0 +1,37 @@
+# Overlay: use --env-file .env.s3 with compose.app.yaml and this file.
+services:
+  app:
+    env_file: [.env.local, .env.s3]
+    depends_on:
+      garage: {condition: service_healthy}
+  worker:
+    env_file: [.env.local, .env.s3]
+    depends_on:
+      garage: {condition: service_healthy}
+  garage:
+    build:
+      context: .
+      dockerfile: docker/garage/Dockerfile
+    command: [/garage, server, --single-node, --default-bucket]
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?Run node scripts/init-s3.cjs first}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?Run node scripts/init-s3.cjs first}
+      GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-secure-transfer}
+    group_add: ["${GARAGE_CONFIG_GID:?Run node scripts/init-s3.cjs first}"]
+    volumes:
+      - ./secrets/garage.toml:/etc/garage.toml:ro
+      - garage-data:/var/lib/garage
+    networks: [backend]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    mem_limit: 512m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, /garage, status]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  garage-data:
