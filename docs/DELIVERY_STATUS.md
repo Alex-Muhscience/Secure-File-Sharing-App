@@ -25,3 +25,7 @@ The v0.3.0 implementation passed [GitHub CI](https://github.com/Alex-Muhscience/
 ## Remaining limitations
 
 Local MongoDB is unauthenticated and private to the Docker network. Files live on one persistent volume; horizontal scaling and remote object storage are not implemented. The prototype's legacy CBC format is not migrated. Notifications can be duplicated across SMTP acknowledgement failures. Audit history is tenant-scoped but not an externally immutable log. Billing is a simulator with bounded embedded event history. Organization creation limits are suitable for local use, not an anti-abuse billing boundary. SSO, API keys, resumable upload and production alerts remain contingent features. No certification, service SLO, revenue outcome or production-readiness claim has been made.
+
+## Next engineering release: v0.4.0 (in progress)
+
+Planned scope: configurable private S3 storage with a local Garage stack; a shared storage boundary for upload, scanning, download, cleanup and backups; verified/resumable ciphertext migration preserving existing data; restore support for either backend; workspace authorization and quota race fixes; local and CI coverage; updated setup and recovery documentation. Existing production/customer acceptance gates still apply. This scope is not yet implemented or verified.
