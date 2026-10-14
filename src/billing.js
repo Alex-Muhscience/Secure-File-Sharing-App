@@ -23,12 +23,16 @@ function billingRoutes({ app, db, pilot, config, audit }) {
     }
     const org = await pilot.orgs.findOne({ _id: req.org._id });
     if ((org.billingEvents?.length || 0) >= 1000) return res.status(409).json({ error: 'Sandbox event limit reached' });
-    const result = await pilot.orgs.updateOne({ _id: req.org._id, owner: req.identity, 'billingEvents.id': { $ne: key } }, {
+    const limits = PLANS[plan];
+    const result = await pilot.orgs.updateOne({ _id: req.org._id, owner: req.identity, 'billingEvents.id': { $ne: key },
+      usedBytes: { $lte: limits.storageBytes }, fileCount: { $lte: limits.files },
+      $expr: { $and: [{ $lte: [{ $size: '$members' }, limits.seats] }, { $lt: [{ $size: { $ifNull: ['$billingEvents', []] } }, 1000] }] },
+    }, {
       $set: { plan, status }, $push: { billingEvents: { id: key, fingerprint, ...event, at: new Date() } },
     });
     if (!result.modifiedCount) {
       const latest = await pilot.orgs.findOne({ _id: req.org._id });
-      if (latest.billingEvents?.find(item => item.id === key)?.fingerprint !== fingerprint) return res.status(409).json({ error: 'Conflicting event' });
+      if (latest.billingEvents?.find(item => item.id === key)?.fingerprint !== fingerprint) return res.status(409).json({ error: 'Event conflicts or current usage exceeds the selected plan limits' });
     }
     await audit('BILLING_SANDBOX', req.identity, null, req.org._id);
     res.json({ success: true, duplicate: !result.modifiedCount });

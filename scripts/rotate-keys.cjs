@@ -12,6 +12,6 @@ async function main() {
       count += result.modifiedCount;
     }
     console.log(`Rewrapped ${count} files to key ID ${config.keyId}. Preserve old keys for backups.`);
-  } finally { await client.close(); }
+  } finally { storage.close(); await client.close(); }
 }
 main().catch(error => { console.error('Key rotation failed:', error.name); process.exitCode = 1; });

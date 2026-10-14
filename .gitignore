@@ -84,3 +84,9 @@ restore/
 # Browser artifacts can contain recipient details
 playwright-report/
 test-results/
+
+# Track only empty directory markers used to seed the Garage volume
+!docker/garage/data/
+docker/garage/data/**
+!docker/garage/data/**/
+!docker/garage/data/**/.gitkeep

@@ -1,6 +1,6 @@
-# Secure Transfer — v0.3.0 local pilot
+# Secure Transfer — v0.4.0 local pilot
 
-Email-verified, encrypted file transfers with team workspaces, role-based access, recipient grants, storage quotas, malware quarantine, retryable notifications, activity export and local billing simulation. Built with Node 24, Express, MongoDB and ClamAV. This is a verified local pilot, not an enterprise production release.
+Email-verified, encrypted file transfers with team workspaces, role-based access, recipient grants, storage quotas, malware quarantine, retryable notifications, activity export and local billing simulation. Ciphertext can live on a local filesystem or a private S3-compatible service. Built with Node 24, Express, MongoDB and ClamAV, with Garage for optional local S3 storage. This release targets local pilot workflows; production acceptance gates remain open.
 
 ## Start
 
@@ -23,12 +23,29 @@ The UI refreshes transfer status every five seconds. Password-protected or exces
 
 Pilot plan: 100 MB, 100 files, 5 seats. Team sandbox plan: 1 GB, 1,000 files, 25 seats. Each transfer reserves capacity atomically; failed uploads and completed deletion return it. Personal workspaces and up to three team workspaces per owner are supported. Plan sizes are local test entitlements, not validated commercial pricing.
 
+Workspace creation, quota reservation and seat changes enforce their limits atomically. Uploads recheck membership after streaming, and downloads recheck current workspace permissions before releasing bytes. Removing a member revokes existing recipient grants immediately; a later explicit grant can authorize access again. Sandbox downgrades below current usage or seat count are rejected.
+
 ```bash
 docker compose --env-file /dev/null -f compose.app.yaml logs --tail=100 app worker scanner
 docker compose --env-file /dev/null -f compose.app.yaml down
 ```
 
 `down` preserves named volumes. The historical preview on 3080 is separate; use 3081 for the working application.
+
+## Optional private S3 storage
+
+After initializing the local stack, enable the Garage overlay:
+
+```bash
+node scripts/init-s3.cjs
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml up -d --build --wait
+```
+
+The generator preserves existing S3 credentials and writes ignored `.env.s3` and `secrets/garage.toml` files. Protect these alongside `.env.local`. Garage has no host ports and stores encrypted objects on a persistent volume. New uploads use S3; existing filesystem transfers remain readable. Use both Compose files for subsequent logs, restart and shutdown commands. This single-node local service has no replica redundancy.
+
+The adapter supports explicit `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3_PREFIX` configuration, as shown in [.env.example](.env.example). It uses configured credentials rather than ambient AWS profiles. Keep endpoint, bucket, prefix and existing filesystem paths stable while transfer records reference them. Startup fails when a required backend is unavailable or unconfigured.
+
+[The operations guide](docs/OPERATIONS.md#private-s3-storage-and-migration-v040) covers verified ciphertext migration in either direction. Migration preserves source copies until the transfer is deleted, so keep the original filesystem volume accessible during that compatibility period. `bash scripts/backup-local.sh` detects the running stack, pauses writes, creates an encrypted snapshot and resumes services. Restore can target an empty filesystem directory or an empty S3 bucket/prefix, and verifies authenticated file bytes before completion.
 
 ## Verification
 
@@ -50,7 +67,17 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Tests create uniquely named disposable databases and remove them afterward. Coverage includes OTP replay/races/expiry/attempts, tenant isolation, role restrictions, quota contention, scanner and SMTP outages, worker replacement/leases, sandbox event idempotency, encryption/key rotation/tampering, deletion retries, restart persistence, encrypted backup restore and corruption rejection. The smoke workflow tests real ClamAV with the harmless EICAR fixture. Chromium checks workspace creation, safe filename rendering, viewer access, recipient downloads, audit export and revocation. Browser artifacts are ignored by Git.
+With the S3 overlay running, test real object storage and then run the same live smoke/browser workflows:
+
+```bash
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml run --rm --no-deps --user root \
+  -v "$PWD/test:/app/test:ro" -e TEST_MONGO_URI=mongodb://mongo:27017 -e TEST_S3=true app npm run test:integration
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml exec -T app node < scripts/smoke.cjs
+npm run test:browser
+bash scripts/backup-local.sh
+```
+
+Tests create uniquely named disposable databases and remove them afterward. Coverage includes OTP replay/races/expiry/attempts, tenant isolation, current role checks, concurrent workspace limits, quota/plan contention, scanner and SMTP outages, worker replacement/leases, sandbox event idempotency, encryption/key rotation/tampering, deletion retries, restart persistence, encrypted backup restore and corruption rejection. S3 coverage includes multipart upload interruption/cleanup, independent storage clients, bad credentials, verified migration/reversal, destination conflicts, required-backend readiness, and restores to both backends. The S3 suite skips unless `TEST_S3=true` with configured credentials. CI runs both storage modes. The smoke workflow tests real ClamAV with the harmless EICAR fixture. Chromium checks workspace creation, safe filename rendering, viewer access, recipient downloads, audit export and revocation. Browser artifacts are ignored by Git.
 
 ## API
 
@@ -80,6 +107,6 @@ Tokens are opaque random secrets stored as hashes and expire after one hour. Bro
 
 Uploads stream directly into ciphertext storage. Each file has a random AES-256-GCM data key wrapped by a versioned server key. Download plaintext is bounded in memory until authentication completes. The app defaults to 10 MB/file and four concurrent transfers/process. ClamAV may extract plaintext into its memory-backed temporary directory during inspection. Server operators can decrypt files; this is not end-to-end encryption.
 
-Only the app and email inbox have loopback host ports. Local MongoDB is unauthenticated on a private Docker network. Data is stored on one persistent volume; production object storage, managed KMS, HTTPS/authenticated infrastructure, identity-provider SSO and real payment integration are not implemented. Retain all necessary historical keys for backups. The original CBC prototype is not automatically migrated.
+Only the app and email inbox have loopback host ports. Local MongoDB is unauthenticated on a private Docker network. Filesystem storage uses one persistent volume; optional Garage storage also runs on one local node. The shared S3 adapter has been tested locally; production provisioning, redundancy, managed KMS, HTTPS/authenticated infrastructure, identity-provider SSO and real payment integration remain external work. During migration, retained filesystem copies still require the original volume. Retain all necessary historical keys for backups. The original CBC prototype is not automatically migrated.
 
 See [operations and recovery](docs/OPERATIONS.md), [delivery status](docs/DELIVERY_STATUS.md) and the [historical audit](ENTERPRISE_AUDIT_AND_PLAN.md). The release plan's customer validation, credential rotation, external security review, production recovery/load tests, commercial evidence and demand-driven scale work remain external gates. Legacy models/middleware/utils and the old Docker deployment are unused by the current app and retained only as historical migration references.

@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const crypto = require('node:crypto');
 const path = require('node:path');
-const fs = require('node:fs/promises');
 const { Pilot } = require('./pilot');
 const { organizationRoutes } = require('./organization-routes');
 const { billingRoutes } = require('./billing');
@@ -126,10 +125,19 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
         return res.status(400).json({ error: 'Provide a recipient and an expiry between 1 and 168 hours' });
       }
       const name = path.basename(req.file.originalname.replace(/\\/g, '/')).replace(/[\x00-\x1f\x7f]/g, '').slice(0, 200) || 'download';
+      const writer = await pilot.orgs.findOne({ _id: req.org._id, status: 'active', members: { $elemMatch: {
+        email: req.identity, role: { $in: ['owner', 'admin', 'member'] },
+      } } }, { projection: { _id: 1 } });
+      if (!writer) {
+        await storage.remove(req.file.objectId, req.file.storageBackend);
+        await pilot.release(req.org._id, req.reservationId);
+        return res.status(403).json({ error: 'Workspace upload access has changed' });
+      }
       await pilot.resize(req.org._id, req.reservationId, req.file.size);
       const file = { _id: crypto.randomUUID(), owner: req.identity, recipient, name,
         orgId: req.org._id, reservationId: req.reservationId,
         objectId: req.file.objectId, size: req.file.size, iv: req.file.iv, tag: req.file.tag,
+        storageBackend: req.file.storageBackend,
         version: req.file.version, keyId: req.file.keyId, wrappedKey: req.file.wrappedKey,
         wrappingIv: req.file.wrappingIv, wrappingTag: req.file.wrappingTag,
         status: 'quarantined', downloads: 0, createdAt: new Date(), expiresAt: new Date(Date.now() + hours * 3600000) };
@@ -147,8 +155,8 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
     const files = await transfers.find({ $or: [
       { orgId: req.org._id, ...(['owner', 'admin'].includes(req.org.role) ? {} : { owner: req.identity }) },
       { recipient: req.identity, recipientRevoked: { $ne: true } },
-    ] }, { projection: { objectId: 0, iv: 0, tag: 0, wrappedKey: 0, wrappingIv: 0, wrappingTag: 0, scanLease: 0, scanLeaseUntil: 0, notification: 0 } }).sort({ createdAt: -1 }).limit(100).toArray();
-    res.json({ files });
+    ] }, { projection: { name: 1, owner: 1, recipient: 1, recipientRevoked: 1, orgId: 1, size: 1, status: 1, downloads: 1, expiresAt: 1, createdAt: 1, scanResult: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
+    res.json({ files: await pilot.visible(files, req.identity, req.org._id) });
   });
   app.get('/api/file/:id/download', capacity, async (req, res) => {
     try {
@@ -157,10 +165,12 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
         { recipient: req.identity, recipientRevoked: { $ne: true } },
       ], status: 'active', expiresAt: { $gt: new Date() } });
       if (!file) return res.status(404).json({ error: 'File unavailable' });
-      if (!await pilot.orgs.findOne({ _id: file.orgId, status: 'active' })) return res.status(404).json({ error: 'File unavailable' });
+      if (!await pilot.authorize(file, req.identity, req.org._id, 'read')) return res.status(404).json({ error: 'File unavailable' });
       const bytes = await storage.decrypt(file);
+      const permission = await pilot.permission(file, req.identity, req.org._id);
+      if (!permission.allowed) return res.status(404).json({ error: 'File unavailable' });
       // Recheck access after reading/authenticating, in case the owner revoked it.
-      const access = await transfers.updateOne({ _id: file._id, status: 'active', expiresAt: { $gt: new Date() }, ...(file.owner !== req.identity ? { recipientRevoked: { $ne: true } } : {}) }, { $inc: { downloads: 1 } });
+      const access = await transfers.updateOne({ _id: file._id, status: 'active', expiresAt: { $gt: new Date() }, ...(!permission.administrative && file.owner !== req.identity ? { recipientRevoked: { $ne: true } } : {}) }, { $inc: { downloads: 1 } });
       if (!access.modifiedCount) return res.status(404).json({ error: 'File unavailable' });
       await audit('DOWNLOAD', req.identity, file._id, file.orgId);
       await db.collection('usage').insertOne({ _id: crypto.randomUUID(), orgId: file.orgId, type: 'download', bytes: file.size, fileId: file._id, at: new Date() });
@@ -170,10 +180,13 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
   });
   app.delete('/api/file/:id', async (req, res) => {
     if (req.org.role === 'viewer') return res.status(403).json({ error: 'Viewer access cannot revoke files' });
-    const file = idValid(req.params.id) && await transfers.findOneAndUpdate({ _id: req.params.id, orgId: req.org._id,
+    const filter = { _id: req.params.id, orgId: req.org._id,
       ...(['owner', 'admin'].includes(req.org.role) ? {} : { owner: req.identity }),
-      status: { $in: ['active', 'quarantined', 'blocked', 'deleting'] } }, { $set: { status: 'deleting' } }, { returnDocument: 'after' });
-    if (!file) return res.status(404).json({ error: 'File unavailable' });
+      status: { $in: ['active', 'quarantined', 'blocked', 'deleting'] } };
+    const file = idValid(req.params.id) && await transfers.findOne(filter);
+    if (!file || !await pilot.authorize(file, req.identity, req.org._id, 'manage')) return res.status(404).json({ error: 'File unavailable' });
+    const revoked = await transfers.updateOne(filter, { $set: { status: 'deleting' } });
+    if (!revoked.matchedCount) return res.status(404).json({ error: 'File unavailable' });
     await audit('REVOKE', req.identity, file._id, file.orgId);
     // Persist the tombstone first; the worker retries object deletion after failures.
     res.json({ success: true });
@@ -193,17 +206,22 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
     try {
       await transfers.updateMany({ $or: [{ status: { $in: ['active', 'quarantined'] }, expiresAt: { $lte: new Date() } }, { status: 'blocked' }] }, { $set: { status: 'deleting' } });
       for await (const file of transfers.find({ status: 'deleting' })) {
-        await storage.remove(file.objectId);
+        await storage.removeRecord(file);
         if (file.orgId && file.reservationId) await pilot.release(file.orgId, file.reservationId);
         await transfers.updateOne({ _id: file._id, status: 'deleting' }, { $set: { status: 'deleted', deletedAt: new Date() }, $unset: { iv: '', tag: '', wrappedKey: '', wrappingIv: '', wrappingTag: '' } });
       }
       await pilot.reconcile();
-      // Recover interrupted uploads after a grace period; live uploads are bounded.
-      for (const name of await fs.readdir(config.storage)) {
-        if (!/^[a-f\d-]{36}\.enc$/.test(name)) continue;
-        const objectId = name.slice(0, -4), stat = await fs.stat(storage.objectPath(objectId)).catch(() => null);
-        if (stat && stat.mtimeMs < Date.now() - 3600000 && !await transfers.findOne({ objectId })) await storage.remove(objectId);
+      // Keep verified migration copies until the transfer itself is deleted.
+      const cutoff = new Date(Date.now() - 3600000);
+      for await (const object of storage.list()) {
+        if (object.modifiedAt >= cutoff) continue;
+        const referenced = await transfers.findOne({ objectId: object.id, status: { $ne: 'deleted' }, $or: [
+          { storageBackend: object.backend }, { retainedBackends: object.backend },
+          ...(object.backend === 'filesystem' ? [{ storageBackend: { $exists: false } }] : []),
+        ] });
+        if (!referenced) await storage.remove(object.id, object.backend);
       }
+      await storage.cleanupMultipart(cutoff);
     } finally { cleaning = false; }
   }
   return { app, cleanup, worker, pilot };
