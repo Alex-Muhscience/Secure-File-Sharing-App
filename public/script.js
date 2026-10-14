@@ -1,211 +1,81 @@
-const uploadButton = document.getElementById("uploadButton");
-const otpField = document.getElementById("otpField");
-const fileInput = document.getElementById("fileInput");
-const emailInput = document.getElementById("emailInput");
-const otpInput = document.getElementById("otpInput");
-const verifyOtpButton = document.getElementById("verifyOtpButton");
-const statusMessage = document.getElementById("statusMessage");
-const fileInfo = document.getElementById("fileInfo");
-const uploadButtonText = document.getElementById("uploadButtonText");
-const uploadButtonLoader = document.getElementById("uploadButtonLoader");
-const verifyButtonText = document.getElementById("verifyButtonText");
-const verifyButtonLoader = document.getElementById("verifyButtonLoader");
-
-let uploadedFileMetadata = null;
-let currentToken = null;
-let currentSessionId = null;
-
-// Show status message
-function showStatus(message, isError = false) {
-  statusMessage.textContent = message;
-  statusMessage.className = `status-message ${isError ? 'status-error' : 'status-success'}`;
-  statusMessage.style.display = 'block';
-  setTimeout(() => {
-    statusMessage.style.display = 'none';
-  }, 5000);
+const $ = id => document.getElementById(id);
+let token = null, identity = null, challenge = null;
+const sharedId = new URL(location.href).searchParams.get('transfer');
+const status = (message, error = false) => { $('status').textContent = message; $('status').dataset.error = String(error); };
+async function api(url, options = {}) {
+  const headers = new Headers(options.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    if (response.status === 401 && token) signedOut();
+    throw new Error(body.error || 'The request failed');
+  }
+  return response;
 }
-
-// Show file info
-fileInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
-    fileInfo.innerHTML = `
-      <p><strong>File:</strong> ${file.name}</p>
-      <p><strong>Size:</strong> ${sizeInMB} MB</p>
-      <p><strong>Type:</strong> ${file.type || 'Unknown'}</p>
-    `;
-    fileInfo.style.display = 'block';
-  } else {
-    fileInfo.style.display = 'none';
-  }
+const post = async (url, body) => (await api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+function signedOut() { token = null; identity = null; $('signin').hidden = false; $('workspace').hidden = true; $('share-result').hidden = true; $('files').replaceChildren(); }
+async function busy(form, action) {
+  const buttons = [...form.querySelectorAll('button')]; buttons.forEach(button => button.disabled = true);
+  try { await action(); } catch (error) { status(error.message, true); }
+  finally { buttons.forEach(button => button.disabled = false); }
+}
+$('request-form').addEventListener('submit', event => {
+  event.preventDefault(); busy(event.currentTarget, async () => {
+    const result = await post('/api/request-otp', { email: $('email').value });
+    challenge = result.sessionId; $('verify-form').hidden = false; $('code').focus(); status('Code sent. Check your email inbox.');
+  });
 });
-
-// Request OTP first
-uploadButton.addEventListener("click", async () => {
-  const email = emailInput.value;
-  if (!email || fileInput.files.length === 0) {
-    showStatus("Please provide an email and select a file.", true);
-    return;
-  }
-
-  // Show loading state
-  uploadButtonText.style.display = 'none';
-  uploadButtonLoader.style.display = 'inline-block';
-  uploadButton.disabled = true;
-
-  try {
-    const otpResponse = await fetch("/api/request-otp", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ 
-        email, 
-        purpose: "file_upload" 
-      }),
-    });
-
-    const otpData = await otpResponse.json();
-    if (!otpData.success) {
-      showStatus(otpData.error || "Failed to send OTP. Please try again.", true);
-      return;
-    }
-
-    currentSessionId = otpData.sessionId;
-    showStatus(`OTP sent to ${email}! Please check your email and enter the OTP below.`);
-    otpField.style.display = "block";
-    uploadButtonText.textContent = "OTP Sent - Enter OTP Below";
-
-  } catch (error) {
-    console.error("Error requesting OTP:", error);
-    showStatus("Failed to send OTP. Please try again.", true);
-  } finally {
-    // Reset button state
-    uploadButtonText.style.display = 'inline';
-    uploadButtonLoader.style.display = 'none';
-    uploadButton.disabled = false;
-  }
+$('verify-form').addEventListener('submit', event => {
+  event.preventDefault(); busy(event.currentTarget, async () => {
+    const result = await post('/api/verify-otp', { sessionId: challenge, otp: $('code').value });
+    token = result.token; identity = result.email; $('code').value = ''; $('verify-form').hidden = true;
+    $('signin').hidden = true; $('workspace').hidden = false; $('identity').textContent = `Signed in as ${identity}`;
+    if (sharedId) { $('shared-message').hidden = false; $('shared-message').textContent = 'A transfer link brought you here. Your available files are listed below.'; }
+    status('Signed in. You can now send and receive files.'); await refresh();
+  });
 });
-
-verifyOtpButton.addEventListener("click", async () => {
-  const otp = otpInput.value.trim();
-  const email = emailInput.value;
-
-  if (!otp || !currentSessionId) {
-    showStatus("Please enter the OTP.", true);
-    return;
-  }
-
-  if (fileInput.files.length === 0) {
-    showStatus("Please select a file.", true);
-    return;
-  }
-
-  // Show loading state
-  verifyButtonText.style.display = 'none';
-  verifyButtonLoader.style.display = 'inline-block';
-  verifyOtpButton.disabled = true;
-
-  try {
-    // First verify OTP and get JWT token
-    const verifyResponse = await fetch("/api/verify-otp", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        otp,
-        sessionId: currentSessionId
-      }),
-    });
-
-    const verifyData = await verifyResponse.json();
-    if (!verifyData.success) {
-      showStatus(verifyData.error || "Invalid OTP. Please try again.", true);
-      return;
-    }
-
-    currentToken = verifyData.token;
-    showStatus("OTP verified! Uploading file...");
-
-    // Now upload file with JWT token
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("email", email);
-
-    const uploadResponse = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-      headers: {
-        Authorization: `Bearer ${currentToken}`,
-      },
-    });
-
-    const uploadData = await uploadResponse.json();
-    if (uploadData.success) {
-      uploadedFileMetadata = uploadData;
-      showStatus("File uploaded and encrypted successfully! Starting download...");
-      
-      // Automatically trigger download
-      const downloadResponse = await fetch("/api/download", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${currentToken}`,
-        },
-        body: JSON.stringify({
-          fileId: uploadData.fileId,
-          email: email
-        }),
-      });
-
-      if (downloadResponse.status === 200) {
-        const blob = await downloadResponse.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = file.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-        showStatus("File processed and downloaded successfully! 🎉");
-        resetForm();
-      } else {
-        const errorData = await downloadResponse.json();
-        showStatus(`Download failed: ${errorData.error}`, true);
+$('upload-form').addEventListener('submit', event => {
+  event.preventDefault(); busy(event.currentTarget, async () => {
+    const file = $('file').files[0];
+    if (!file || file.size > 10 * 1024 * 1024) throw new Error('Choose a file no larger than 10 MB');
+    const body = new FormData(); body.append('file', file); body.append('recipient', $('recipient').value); body.append('expiryHours', $('expiry').value);
+    status('Uploading and encrypting your file…');
+    const result = await (await api('/api/upload', { method: 'POST', body })).json();
+    $('share-link').value = result.shareUrl; $('share-result').hidden = false; $('file').value = '';
+    status(result.notified ? 'File shared. The recipient has been emailed.' : 'File saved. Email delivery failed; copy and send the link.'); await refresh();
+  });
+});
+async function refresh() {
+  const { files } = await (await api('/api/files')).json();
+  $('files').replaceChildren();
+  if (!files.length) { $('files').textContent = 'No transfers yet.'; return; }
+  files.sort((a, b) => Number(b._id === sharedId) - Number(a._id === sharedId));
+  for (const file of files) {
+    const item = document.createElement('article'); item.className = 'transfer';
+    const title = document.createElement('strong'); title.textContent = file.name;
+    const details = document.createElement('p');
+    const expired = new Date(file.expiresAt) <= new Date();
+    details.textContent = `${file.owner === identity ? `To ${file.recipient}` : `From ${file.owner}`} · ${(file.size / 1024).toFixed(1)} KB · ${file.status === 'active' && expired ? 'expired' : file.status} · expires ${new Date(file.expiresAt).toLocaleString()} · ${file.downloads} downloads`;
+    item.append(title, details);
+    if (file.status === 'active' && !expired) {
+      const download = document.createElement('button'); download.textContent = 'Download';
+      download.addEventListener('click', () => busy(item, async () => {
+        const response = await api(`/api/file/${file._id}/download`), blob = await response.blob();
+        const url = URL.createObjectURL(blob), anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        status('Download complete.'); await refresh();
+      })); item.append(download);
+      if (file.owner === identity) {
+        const revoke = document.createElement('button'); revoke.className = 'secondary'; revoke.textContent = 'Revoke and delete';
+        revoke.addEventListener('click', () => busy(item, async () => {
+          await api(`/api/file/${file._id}`, { method: 'DELETE' }); status('Access revoked. File deletion is queued.'); await refresh();
+        })); item.append(revoke);
       }
-    } else {
-      showStatus(`Upload failed: ${uploadData.error}`, true);
     }
-  } catch (error) {
-    console.error("Error during upload/download:", error);
-    showStatus("An error occurred. Please try again.", true);
-  } finally {
-    // Reset button state
-    verifyButtonText.style.display = 'inline';
-    verifyButtonLoader.style.display = 'none';
-    verifyOtpButton.disabled = false;
+    $('files').append(item);
   }
-});
-
-// Auto-format OTP input
-otpInput.addEventListener('input', (e) => {
-  e.target.value = e.target.value.replace(/\D/g, '').substring(0, 6);
-});
-
-function resetForm() {
-  emailInput.value = "";
-  fileInput.value = "";
-  otpInput.value = "";
-  otpField.style.display = "none";
-  fileInfo.style.display = "none";
-  uploadButtonText.textContent = "🚀 Request OTP & Upload";
-  uploadButton.disabled = false;
-  uploadedFileMetadata = null;
-  currentToken = null;
-  currentSessionId = null;
 }
+$('refresh').addEventListener('click', () => busy($('workspace'), refresh));
+$('logout').addEventListener('click', () => busy($('workspace'), async () => { await post('/api/logout', {}); signedOut(); status('Signed out.'); }));
+$('copy').addEventListener('click', () => busy($('share-result'), async () => { await navigator.clipboard.writeText($('share-link').value); status('Link copied.'); }));
+fetch('/ready').then(response => status(response.ok ? 'Ready. Sign in to start a transfer.' : 'The application is unavailable.', !response.ok)).catch(() => status('Could not connect to the application.', true));

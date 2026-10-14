@@ -1,0 +1,46 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const { Readable } = require('node:stream');
+const { EventEmitter } = require('node:events');
+const { loadConfig } = require('../src/config');
+const { Storage } = require('../src/storage');
+const env = { ENCRYPTION_KEY: 'ab'.repeat(32), OTP_SECRET: 'cd'.repeat(32), MONGO_URI: 'mongodb://localhost/test', SMTP_HOST: 'localhost' };
+test('configuration rejects absent, reused and malformed keys and invalid limits', () => {
+  assert.throws(() => loadConfig({}), /ENCRYPTION_KEY/);
+  assert.throws(() => loadConfig({ ...env, OTP_SECRET: env.ENCRYPTION_KEY }), /independent/);
+  assert.throws(() => loadConfig({ ...env, MAX_FILE_SIZE: '-1' }), /MAX_FILE_SIZE/);
+  assert.throws(() => loadConfig({ ...env, MAX_TRANSFERS: '99' }), /MAX_TRANSFERS/);
+  assert.equal(loadConfig(env).maxSize, 10485760);
+});
+test('streamed encrypted storage preserves bytes and rejects tampering, metadata substitution and wrong keys', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'transfer-test-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const storage = new Storage({ ...loadConfig(env), storage: directory }); await storage.init();
+  const bytes = crypto.randomBytes(256 * 1024), request = new EventEmitter();
+  const stored = await new Promise((resolve, reject) => storage._handleFile(request, { stream: Readable.from(bytes) }, (error, info) => error ? reject(error) : resolve(info)));
+  assert.deepEqual(await storage.decrypt(stored), bytes);
+  assert.notDeepEqual(await fs.readFile(storage.objectPath(stored.objectId)), bytes);
+  assert.equal((await fs.stat(storage.objectPath(stored.objectId))).mode & 0o777, 0o600);
+  await assert.rejects(storage.decrypt({ ...stored, tag: '00'.repeat(16) }));
+  const wrong = new Storage({ ...storage.config, key: crypto.randomBytes(32) });
+  await assert.rejects(wrong.decrypt(stored));
+  const ciphertext = await fs.readFile(storage.objectPath(stored.objectId)); ciphertext[0] ^= 1;
+  await fs.writeFile(storage.objectPath(stored.objectId), ciphertext);
+  await assert.rejects(storage.decrypt(stored));
+  assert.throws(() => storage.objectPath('../../secret'), /identifier/);
+  await storage.remove(stored.objectId); await storage.remove(stored.objectId);
+  assert.deepEqual(await fs.readdir(directory), []);
+});
+test('interrupted encryption removes the partial object', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'transfer-abort-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const storage = new Storage({ ...loadConfig(env), storage: directory }); await storage.init();
+  const request = new EventEmitter();
+  const stream = new Readable({ read() { this.push(Buffer.alloc(1024)); this.destroy(new Error('interrupted')); } });
+  await assert.rejects(new Promise((resolve, reject) => storage._handleFile(request, { stream }, error => error ? reject(error) : resolve())));
+  assert.deepEqual(await fs.readdir(directory), []);
+});

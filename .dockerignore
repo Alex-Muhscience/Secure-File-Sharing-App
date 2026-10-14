@@ -1,0 +1,14 @@
+node_modules
+.git
+.env
+.env.*
+!.env.example
+uploads
+downloads
+logs
+data
+.aws
+.agents
+.codex
+coverage
+*.log
