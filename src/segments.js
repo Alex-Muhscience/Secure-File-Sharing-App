@@ -2,6 +2,8 @@ const crypto = require("node:crypto");
 const path = require("node:path");
 const express = require("express");
 const { sha256 } = require("./parts");
+const { decodeTransport } = require('./chunk-transport');
+const { PROFILES } = require('./file-profiles');
 const { isActive } = require("./pilot");
 const failure = (status, message) =>
   Object.assign(new Error(message), { status });
@@ -156,6 +158,7 @@ function resumableRoutes({
     chunkSize: row.chunkSize,
     status: row.status,
     compression: row.compression,
+    purpose: row.purpose || 'send', profile: row.profile || 'documents', exportFormat: row.exportFormat || 'stc',
     expiresAt: row.expiresAt,
   });
   const owner = (req) => ({
@@ -183,6 +186,7 @@ function resumableRoutes({
     status: file.status,
     storedSize: file.storedSize,
     size: file.size,
+    purpose: file.purpose || 'send',
   });
   app.get("/api/uploads", async (req, res) => {
     const rows = await uploads
@@ -212,9 +216,10 @@ function resumableRoutes({
         fingerprint,
         resumeId,
         compression = "auto",
+        purpose = 'send', profile = 'documents', exportFormat = 'stc',
         expiryHours = 24,
       } = req.body,
-      recipient = email(req.body.recipient);
+      recipient = purpose === 'send' ? email(req.body.recipient) : null;
     if (
       typeof name !== "string" ||
       !name ||
@@ -222,10 +227,12 @@ function resumableRoutes({
       !Number.isSafeInteger(size) ||
       size < 0 ||
       size > Math.min(config.maxSize, config.scanMaxSize) ||
-      !recipient ||
+      (purpose === 'send' && !recipient) ||
+      !['send','compress','restore'].includes(purpose) || !PROFILES.includes(profile) || !['stc','gzip'].includes(exportFormat) ||
+      (purpose !== 'send' && req.body.recipient != null) ||
       typeof fingerprint !== "string" ||
       !/^[a-f\d]{64}$/.test(fingerprint) ||
-      !["auto", "maximum", "none"].includes(compression) ||
+      !["auto", "maximum", "none", "adaptive", "smallest", "research"].includes(compression) ||
       !Number.isInteger(expiryHours) ||
       expiryHours < 1 ||
       expiryHours > 168
@@ -257,7 +264,7 @@ function resumableRoutes({
         existing.size !== size ||
         existing.recipient !== recipient ||
         existing.expiryHours !== expiryHours ||
-        existing.compression !== compression
+        existing.compression !== compression || (existing.purpose || 'send') !== purpose || (existing.profile || 'documents') !== profile || (existing.exportFormat || 'stc') !== exportFormat
       )
         throw failure(
           409,
@@ -297,6 +304,7 @@ function resumableRoutes({
       size,
       fingerprint,
       compression,
+      purpose, profile, exportFormat,
       expiryHours,
       offset: 0,
       chunkCount: 0,
@@ -377,13 +385,21 @@ function resumableRoutes({
       const offset = Number(rawOffset);
       if (!Number.isSafeInteger(offset) || offset > upload.offset)
         throw failure(409, "Chunk offset does not match the saved upload");
+      if(req.get('Content-Encoding') && req.get('Content-Encoding')!=='identity') throw failure(400,'Use an explicit chunk wire codec');
       await new Promise((resolve, reject) =>
         express.raw({
           type: "application/octet-stream",
-          limit: config.chunkSize,
+          limit: Math.min(config.chunkSize,upload.size-offset),
+          inflate: false,
         })(req, res, (error) => (error ? reject(error) : resolve())),
       );
-      const bytes = req.body;
+      const wire = req.body;
+      const wireCodec = req.get('X-Chunk-Codec') || 'none';
+      const logicalLength = req.get('X-Chunk-Logical-Length');
+      const expectedSize = Math.min(upload.chunkSize,upload.size-offset);
+      if(req.get('Content-Encoding') && req.get('Content-Encoding')!=='identity' || logicalLength !== undefined && logicalLength!==String(expectedSize)) throw failure(400,'Invalid chunk transport settings');
+      if(Buffer.isBuffer(wire))await uploads.updateOne({_id:upload._id,lease:upload.lease},{$inc:{wireReceivedBytes:wire.length}});
+      const bytes = await decodeTransport(wire,{codec:wireCodec,expectedSize,sha256:checksum});
       if (
         !Buffer.isBuffer(bytes) ||
         bytes.length !== Math.min(upload.chunkSize, upload.size - offset) ||
@@ -496,7 +512,9 @@ function resumableRoutes({
         name: upload.name,
         size: upload.size,
         storedSize: upload.storedSize,
+        uploadPayloadBytes: upload.wireReceivedBytes || 0,
         compression: upload.compression,
+        purpose: upload.purpose || 'send', profile: upload.profile || 'documents', exportFormat: upload.exportFormat || 'stc',
         chunkSize: upload.chunkSize,
         chunkCount: upload.chunkCount,
         version: upload.version,

@@ -21,6 +21,8 @@ function shaper(rate) {
   } });
 }
 async function measure(fixture, profile, clients, repetitions, mode, interrupted) {
+  const wireMode=option('wire',mode==='baseline'?'none':'gzip'),downloadFormat=option('download',mode==='baseline'?'original':'stc'),storageMode=option('compression',mode==='baseline'?'auto':'adaptive');
+  if(!['none','gzip'].includes(wireMode)||!['original','stc'].includes(downloadFormat)||!['auto','adaptive','research','smallest','none'].includes(storageMode))throw new Error('Invalid benchmark variant');
   const root = path.resolve(option('app-root', path.join(__dirname, '..')));
   const { createApp } = require(path.join(root, 'src/app'));
   const { Storage } = require(path.join(root, 'src/storage'));
@@ -66,12 +68,12 @@ async function measure(fixture, profile, clients, repetitions, mode, interrupted
       const batch = await Promise.all(identities.map(async ({ identity, headers }) => {
         const started = performance.now(); let encodeMs = 0, uploadWireBytes = 0;
         const post = async (url, body) => { const r = await fetch(base + url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); assert.equal(r.ok, true, await r.clone().text()); return r.json(); };
-        const settings = { name: fixture.name, size: fixture.bytes.length, recipient: identity, fingerprint: crypto.randomBytes(32).toString('hex'), compression: mode === 'baseline' ? 'auto' : 'adaptive' };
+        const settings = { name: fixture.name, size: fixture.bytes.length, recipient: identity, fingerprint: crypto.randomBytes(32).toString('hex'), compression: storageMode };
         const upload = await post('/api/uploads', settings);
         for (let offset = 0; offset < fixture.bytes.length; offset += upload.chunkSize) {
           const plain = fixture.bytes.subarray(offset, offset + upload.chunkSize);
           const before = performance.now(); let body = plain, codec = 'none';
-          if (mode !== 'baseline') {
+          if (wireMode === 'gzip') {
             const gzip = require('node:util').promisify(require('node:zlib').gzip);
             const compressed = await gzip(plain, { level: 1 });
             if (compressed.length < plain.length * .98) { body = compressed; codec = 'gzip'; }
@@ -90,25 +92,25 @@ async function measure(fixture, profile, clients, repetitions, mode, interrupted
       await running.worker.tick();
       const ready = performance.now();
       const measured = await Promise.all(batch.map(async row => {
-        const suffix = mode === 'baseline' ? 'download' : 'export/stc';
+        const suffix = downloadFormat === 'original' ? 'download' : 'export/stc';
         const response = await fetch(`${base}/api/file/${row.completed.fileId}/${suffix}`, { headers: row.headers });
         assert.equal(response.status, 200, await response.clone().text());
         let firstByteMs = null, downloadWireBytes = 0; const chunks = [];
         const downloadStart = performance.now();
         for await (const bytes of response.body) { firstByteMs ??= performance.now() - ready; downloadWireBytes += bytes.length; chunks.push(Buffer.from(bytes)); }
         const downloaded = performance.now(); let bytes = Buffer.concat(chunks);
-        if (mode !== 'baseline') {
+        if (downloadFormat !== 'original') {
           const { restore } = require(path.join(root, 'src/compressed-archive'));
           const opened = await restore([bytes], { maxOutputBytes: config.maxSize });
           const plain = []; for await (const part of opened.stream) plain.push(part); bytes = Buffer.concat(plain);
         }
         assert.equal(hash(bytes), fixture.sha256); assert.equal(bytes.length, fixture.bytes.length);
-        return { seconds: (performance.now() - row.started) / 1000, encodeMs: row.encodeMs, uploadSeconds: (row.uploaded - row.started) / 1000, readySeconds: (ready - row.started) / 1000, firstByteMs: firstByteMs || 0, downloadSeconds: (downloaded - downloadStart) / 1000, restoreMs: performance.now() - downloaded, logicalBytes: fixture.bytes.length, storedBytes: row.completed.storedSize, uploadWireBytes: row.uploadWireBytes, downloadWireBytes, ...(mode !== 'baseline' ? { artifactBytes: downloadWireBytes } : {}), peakRssBytes: Math.max(peakRss, process.memoryUsage().rss), verified: true };
+        return { seconds: (performance.now() - row.started) / 1000, encodeMs: row.encodeMs, uploadSeconds: (row.uploaded - row.started) / 1000, readySeconds: (ready - row.started) / 1000, firstByteMs: firstByteMs || 0, downloadSeconds: (downloaded - downloadStart) / 1000, restoreMs: performance.now() - downloaded, logicalBytes: fixture.bytes.length, storedBytes: row.completed.storedSize, uploadWireBytes: row.uploadWireBytes, downloadWireBytes, ...(downloadFormat !== 'original' ? { artifactBytes: downloadWireBytes } : {}), peakRssBytes: Math.max(peakRss, process.memoryUsage().rss), verified: true };
       }));
       rows.push(...measured);
     }
     const cpu = process.cpuUsage(cpuStart);
-    return { fixture: fixture.name, sha256: fixture.sha256, mode, clients, interrupted, profile, scanner: option('scanner', 'clamav'), sourceVersion: require(path.join(root, 'package.json')).version, revision: option('revision', 'unrecorded working tree'), cpuMilliseconds: (cpu.user + cpu.system) / 1000, networkAccounting: 'HTTP body bytes; HTTP/TCP/TLS overhead not measured. Shared application-stream shaping, not a TCP congestion simulation.', summary: summarize(rows), rows };
+    return { fixture: fixture.name, sha256: fixture.sha256, mode, wireMode,downloadFormat,storageMode, clients, batches:repetitions, interrupted, profile, scanner: option('scanner', 'clamav'), sourceVersion: require(path.join(root, 'package.json')).version, revision: option('revision', 'unrecorded working tree'), cpuMilliseconds: (cpu.user + cpu.system) / 1000, client:'Node gzip level 1; browser worker behavior verified separately, browser encode time not measured here',networkAccounting: 'File-chunk and attachment HTTP body bytes only; excludes API metadata and HTTP/TCP/TLS overhead. Shared application-stream shaping, not a TCP congestion simulation.', summary: summarize(rows), rows };
   } finally {
     clearInterval(sampler);
     for (const instance of [proxy, server]) if (instance) { instance.closeAllConnections(); await new Promise(resolve => instance.close(resolve)); }
@@ -127,7 +129,7 @@ async function main() {
       for (const link of Object.values(profiles)) for (const count of [1, 4]) for (const resume of [false, true]) results.push(await measure(fixture, link, count, repetitions, option('mode', 'baseline'), resume));
     } else results.push(await measure(fixture, profile, clients, repetitions, option('mode', 'baseline'), args.includes('--resume')));
   }
-  console.log(JSON.stringify({ version: 1, corpus: manifest(), results }, null, 2));
+  console.log(JSON.stringify({ version: 1, measuredAt:new Date().toISOString(),runtime:process.version,corpus: manifest(), results }, null, 2));
 }
 if (require.main === module) main().catch(error => { console.error('Transfer benchmark failed:', error.message); process.exitCode = 1; });
 module.exports = { measure, profiles };

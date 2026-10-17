@@ -11,6 +11,7 @@ class Worker {
     try {
       await this.db.collection('workers').updateOne({ _id: this.id }, { $set: { heartbeat: new Date() } }, { upsert: true });
       await this.payments?.tick();
+      await require('./restore-job').repairCompletions(this);
       // Each job lives on the transfer so it cannot be lost between metadata and queue writes.
       for (let count = 0; count < 20; count++) {
         const lease = crypto.randomUUID(), now = new Date();
@@ -32,12 +33,20 @@ class Worker {
         }, 20000);
         renew.unref();
         try {
+          if(file.pendingRestoreParent){
+            const parent=await this.transfers.findOne({_id:file.pendingRestoreParent});
+            if(parent?.restoreState==='complete'&&parent.restoredFileId===file._id&&file.restoreVerified){await this.transfers.updateOne({_id:file._id,status:'quarantined',scanLease:lease},{$set:{status:'active'},$unset:{pendingRestoreParent:'',scanLease:'',scanLeaseUntil:''}});}
+            else if(!parent||['deleting','deleted','blocked'].includes(parent.status)){await this.transfers.updateOne({_id:file._id,scanLease:lease},{$set:{status:'deleting'},$unset:{scanLease:'',scanLeaseUntil:''}});}
+            else await this.transfers.updateOne({_id:file._id,scanLease:lease},{$set:{scanRetryAt:new Date(Date.now()+3000)},$unset:{scanLease:'',scanLeaseUntil:''}});
+            continue;
+          }
+          if(file.purpose==='restore'){await require('./restore-job').restoreJob(this,file);continue;}
           const result = file.format === 'segments-v1'
             ? await this.scanner.scanStream(this.storage.plaintext(file), { size: file.size, fileId: file._id })
             : await this.scanner.scan(await this.storage.decrypt(file));
           const update = await this.transfers.updateOne({ _id: file._id, status: 'quarantined', scanLease: lease }, {
             $set: { status: result.clean ? 'active' : 'blocked', scanResult: result.clean ? 'clean' : 'infected', scannedAt: new Date(),
-              ...(result.clean ? { notification: { status: 'pending', attempts: 0, nextAttempt: new Date() } } : { blockedAt: new Date() }) },
+              ...(result.clean && (!file.purpose || file.purpose === 'send') ? { notification: { status: 'pending', attempts: 0, nextAttempt: new Date() } } : !result.clean ? { blockedAt: new Date() } : {}) },
             $unset: { scanLease: '', scanLeaseUntil: '', scanRetryAt: '' },
           });
           if (update.modifiedCount) await this.audit(result.clean ? 'SCAN_CLEAN' : 'SCAN_BLOCKED', 'worker', file._id, file.orgId);
@@ -50,7 +59,7 @@ class Worker {
   }
   async maintain() {
     if (this.maintaining) return; this.maintaining = true;
-    try { await this.payments?.tick(); await this.notify(); }
+    try { await this.payments?.tick(); await require('./restore-job').repairCompletions(this); await this.notify(); }
     finally { this.maintaining = false; }
   }
   async notify() {

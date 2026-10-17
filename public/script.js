@@ -104,6 +104,7 @@ function resetActions() {
 }
 function advanceContext() {
   revision++;
+  compressionUI.context();
   resetActions();
 }
 async function busy(root, action, errorId) {
@@ -482,6 +483,7 @@ function renderContext() {
   $("nav-settings").hidden = !isAdmin();
   $("nav-analytics").hidden = $("nav-billing").hidden = !isAdmin();
   $("new-transfer").hidden = !canSend();
+  $("new-compression").hidden = !canSend();
   $("workspace-notice").hidden = canSend();
   $("workspace-notice").textContent =
     org.status !== "active"
@@ -643,12 +645,12 @@ function transferRow(file) {
     node(
       "span",
       "person-label",
-      file.owner === identity ? "Sent to" : "Shared by",
+      file.owner === identity ? file.recipient ? "Sent to" : "Private workspace file" : "Shared by",
     ),
     node(
       "span",
       "person-email",
-      file.owner === identity ? file.recipient : file.owner,
+      file.owner === identity ? file.recipient || (file.purpose==='restore'?'Archive restore':'Compression job') : file.owner,
     ),
   );
   const statusCell = node("div", "status-cell"),
@@ -674,6 +676,7 @@ function transferRow(file) {
     time,
   );
   const actions = node("div", "row-actions");
+  if(file.purpose)actions.append(rowAction(file,'archive','Compression details',button=>compressionUI.show(file._id,button)));
   if (state.key === "ready")
     actions.append(
       rowAction(file, "download", "Download", (button) =>
@@ -760,7 +763,7 @@ function renderFiles() {
       (statusFilter === "all" || fileState(file).key === statusFilter) &&
       (!query ||
         [file.name, file.owner, file.recipient].some((value) =>
-          value.toLocaleLowerCase().includes(query),
+          String(value??'').toLocaleLowerCase().includes(query),
         )),
   );
   filtered.sort(

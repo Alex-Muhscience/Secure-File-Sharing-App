@@ -17,7 +17,15 @@ const resumable = (() => {
         signal,
       })
     ).json();
-  function chunkRequest(id, body, offset, checksum, signal, onProgress) {
+  function chunkRequest(
+    id,
+    body,
+    offset,
+    checksum,
+    signal,
+    onProgress,
+    transport,
+  ) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest(),
         requestToken = token;
@@ -28,6 +36,13 @@ const resumable = (() => {
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
       xhr.setRequestHeader("Upload-Offset", String(offset));
       xhr.setRequestHeader("X-Chunk-SHA256", checksum);
+      if (transport) {
+        xhr.setRequestHeader("X-Chunk-Codec", transport.wireCodec);
+        xhr.setRequestHeader(
+          "X-Chunk-Logical-Length",
+          String(transport.logicalSize),
+        );
+      }
       const abort = () => xhr.abort();
       const finish = (error, result) => {
         signal.removeEventListener("abort", abort);
@@ -47,8 +62,10 @@ const resumable = (() => {
             ),
           );
         }
-        if (xhr.status >= 200 && xhr.status < 300) finish(null, result);
-        else
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress(body.byteLength);
+          finish(null, result);
+        } else
           finish(
             Object.assign(
               new Error(result.error || "Part could not be uploaded"),
@@ -89,7 +106,7 @@ const resumable = (() => {
       if (signal.aborted) abort();
       else signal.addEventListener("abort", abort, { once: true });
     });
-  async function send(file, settings, signal) {
+  async function send(file, settings, signal, hooks = {}) {
     const started = revision;
     const check = () => {
       if (signal.aborted) throw new DOMException("Upload paused", "AbortError");
@@ -122,17 +139,43 @@ const resumable = (() => {
     );
     check();
     activeId = saved.uploadId;
+    hooks.session?.(saved);
     $("discard-upload").hidden = false;
-    let offset = saved.offset;
+    let offset = saved.offset,
+      wireSentBytes = 0;
+    const optimized =
+      ["adaptive", "smallest", "research"].includes(settings.compression) &&
+      config.resumable?.uploadCodecs?.includes("gzip");
+    const prepare = async (position) => {
+      const raw = await file
+        .slice(position, position + saved.chunkSize)
+        .arrayBuffer();
+      check();
+      return optimized
+        ? uploadCompression.prepareChunk(raw, {
+            mode: settings.compression,
+            signal,
+          })
+        : {
+            wireBytes: raw,
+            logicalSize: raw.byteLength,
+            sha256: await digest(raw),
+            wireCodec: "none",
+          };
+    };
+    let prepared = offset < file.size ? prepare(offset) : null;
     while (offset < file.size) {
       check();
-      const body = await file
-          .slice(offset, offset + saved.chunkSize)
-          .arrayBuffer(),
-        checksum = await digest(body);
+      const transport = await prepared,
+        body = transport.wireBytes,
+        checksum = transport.sha256;
+      const next = offset + transport.logicalSize;
+      prepared = next < file.size ? prepare(next) : null;
+      prepared?.catch(() => {});
       check();
       let result;
       for (let attempt = 0; attempt < 3; attempt++) {
+        let observed = 0;
         try {
           result = await chunkRequest(
             activeId,
@@ -142,14 +185,29 @@ const resumable = (() => {
             signal,
             (uploaded) => {
               if (started !== revision) return;
+              const measured = Math.min(body.byteLength, uploaded);
+              wireSentBytes += Math.max(0, measured - observed);
+              observed = Math.max(observed, measured);
+              const logicalUploaded = Math.floor(
+                Math.min(1, uploaded / Math.max(1, body.byteLength)) *
+                  transport.logicalSize,
+              );
               const percent = Math.min(
                 99,
-                Math.floor(((offset + uploaded) / file.size) * 100),
+                Math.floor(((offset + logicalUploaded) / file.size) * 100),
               );
               $("upload-progress").value = percent;
               $("upload-label").textContent =
-                `Uploading ${percent}% · ${bytes(offset + uploaded)} of ${bytes(file.size)}`;
+                `Uploading ${percent}% · ${bytes(offset + logicalUploaded)} of ${bytes(file.size)}`;
+              hooks.progress?.({
+                percent,
+                offset,
+                logicalUploaded,
+                wireSentBytes,
+                processingMs: transport.processingMs || 0,
+              });
             },
+            optimized ? transport : null,
           );
           break;
         } catch (error) {
@@ -167,6 +225,14 @@ const resumable = (() => {
           "The saved upload offset is invalid. Refresh before retrying.",
         );
       offset = result.offset;
+      hooks.progress?.({
+        percent: Math.min(
+          99,
+          Math.floor((offset / Math.max(1, file.size)) * 100),
+        ),
+        offset,
+        wireSentBytes,
+      });
     }
     $("upload-label").textContent = "Verifying your saved transfer…";
     const result = await request(
@@ -178,7 +244,7 @@ const resumable = (() => {
     activeId = expectedResume = null;
     $("discard-upload").hidden = true;
     $("upload-progress").value = 100;
-    return result;
+    return { ...result, wireSentBytes };
   }
   async function refreshPending() {
     if (!config.resumable?.enabled) return;
@@ -208,6 +274,13 @@ const resumable = (() => {
         );
         resume.type = discard.type = "button";
         resume.addEventListener("click", () => {
+          if (
+            (upload.purpose && upload.purpose !== "send") ||
+            ["adaptive", "smallest", "research"].includes(upload.compression)
+          ) {
+            compressionUI.resume(upload, resume);
+            return;
+          }
           newTransfer(resume);
           expectedResume = upload.uploadId;
           activeId = upload.uploadId;

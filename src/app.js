@@ -15,6 +15,7 @@ const { createAudit, auditRoutes } = require('./audit');
 const { Worker } = require('./worker');
 const { Scanner } = require('./scanner');
 const { byteRange } = require('./ranges');
+const { compressionRoutes } = require('./compression-routes');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const email = value => typeof value === 'string' && value.length <= 254 && /^[a-z\d.!#$%&'*+/=?^_`{|}~-]+@[a-z\d](?:[a-z\d-]*[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]*[a-z\d])?)+$/i.test(value) ? value.toLowerCase() : null;
 const idValid = value => typeof value === 'string' && /^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/.test(value);
@@ -32,6 +33,7 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
   const audit = createAudit(db), pilot = new Pilot(db);
   const payments = new Payments({ config, db, gateway: paymentGateway });
   const worker = new Worker({ config, db, storage, mail, scanner, audit, payments });
+  worker.pilot=pilot;
   const digest = (id, code) => crypto.createHmac('sha256', config.otpSecret).update(`${id}:${code}`).digest('hex');
   const limit = (scope, max, windowMs) => async (req, res, next) => {
     const now = Date.now();
@@ -52,8 +54,9 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
   const apiLimit = limit('api', 200, 60000), chunkLimit = limit('chunks', 2000, 60000);
   app.use('/api', (req, res, next) => /^\/uploads\/[^/]+\/chunks$/.test(req.path) ? chunkLimit(req, res, next) : apiLimit(req, res, next));
   app.get('/api/config', (req, res) => {
-    const local = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(config.baseUrl).hostname);
-    res.json({ maxFileSize: Math.min(config.maxSize, config.scanMaxSize), billingSandbox: config.billingSandbox, resumable: { enabled: true, chunkSize: config.chunkSize },
+    const hostname = new URL(config.baseUrl).hostname;
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(hostname)||hostname.endsWith('.localhost');
+    res.json({ maxFileSize: Math.min(config.maxSize, config.scanMaxSize), billingSandbox: config.billingSandbox, resumable: { enabled: true, chunkSize: config.chunkSize, uploadCodecs:['none','gzip','stp1'] },
       inboxUrl: local && config.smtp.host === 'mail' ? 'http://localhost:8025' : null });
   });
   app.post('/api/request-otp', limit('otp', 10, 900000), async (req, res) => {
@@ -95,11 +98,13 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
     res.json({ success: true });
   });
   app.use('/api', async (req, res, next) => {
-    const downloadId = req.method === 'GET' && req.path.match(/^\/download\/([a-f\d-]{36})$/)?.[1];
+    const downloadPath = req.method === 'GET' && req.path.match(/^\/download\/([a-f\d-]{36})(?:\/(stc|gzip))?$/);
+    const downloadId = downloadPath?.[1];
     if (downloadId && idValid(downloadId)) {
-      const cookieName = `st_download_${downloadId.replaceAll('-', '')}`;
+      const representation=downloadPath[2]||'original';
+      const cookieName = `st_download_${downloadId.replaceAll('-', '')}${representation==='original'?'':'_'+representation}`;
       const value = (req.get('Cookie') || '').split(';').map(part => part.trim()).find(part => part.startsWith(cookieName + '='))?.slice(cookieName.length + 1);
-      const grant = /^[a-f\d]{64}$/.test(value || '') && await db.collection('downloadGrants').findOne({ _id: hash(value), fileId: downloadId, expiresAt: { $gt: new Date() } });
+      const grant = /^[a-f\d]{64}$/.test(value || '') && await db.collection('downloadGrants').findOne({ _id: hash(value), fileId: downloadId, expiresAt: { $gt: new Date() }, ...(representation==='original'?{$or:[{representation:'original'},{representation:{$exists:false}}]}:{representation}) });
       if (!grant) return res.status(401).json({ error: 'Download access expired. Sign in and start the download again.' });
       req.identity = grant.identity; req.sessionHash = grant.sessionHash; req.contextOrganization = grant.orgId; req.downloadGrant = grant;
       return next();
@@ -145,6 +150,7 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
     next();
   };
   resumableRoutes({ app, db, config, storage, pilot, audit, email, idValid, capacity });
+  const compressed = compressionRoutes({app,db,storage,pilot,audit,idValid,capacity});
   app.post('/api/upload', capacity, async (req, res, next) => {
     if (req.org.status !== 'active' || req.org.role === 'viewer') return res.status(403).json({ error: 'This workspace cannot upload files' });
     const declared = req.get('X-File-Size');
@@ -202,17 +208,19 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
     const files = await transfers.find({ ...(requested ? { _id: requested } : {}), $or: [
       { orgId: req.org._id, ...(['owner', 'admin'].includes(req.org.role) ? {} : { owner: req.identity }) },
       { recipient: req.identity, recipientRevoked: { $ne: true } },
-    ] }, { projection: { name: 1, owner: 1, recipient: 1, recipientRevoked: 1, orgId: 1, size: 1, status: 1, downloads: 1, expiresAt: 1, createdAt: 1, scanResult: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
+    ] }, { projection: { name: 1, owner: 1, recipient: 1, recipientRevoked: 1, orgId: 1, size: 1, status: 1, downloads: 1, expiresAt: 1, createdAt: 1, scanResult: 1, purpose:1,profile:1,exportFormat:1,restoredFileId:1 } }).sort({ createdAt: -1 }).limit(100).toArray();
     res.json({ files: await pilot.visible(files, req.identity, req.org._id) });
   });
   app.post('/api/file/:id/download-ticket', async (req, res) => {
+    const representation=req.body?.representation||'original';
+    if(!['original','stc','gzip'].includes(representation))return res.status(400).json({error:'Choose a supported download representation'});
     const file = idValid(req.params.id) && await transfers.findOne({ _id: req.params.id, status: 'active', expiresAt: { $gt: new Date() } });
     if (!file || !await pilot.authorize(file, req.identity, req.org._id, 'read')) return res.status(404).json({ error: 'File unavailable' });
     const ticket = crypto.randomBytes(32).toString('hex');
-    await db.collection('downloadTickets').insertOne({ _id: hash(ticket), identity: req.identity, sessionHash: req.sessionHash, orgId: req.org._id, fileId: file._id, expiresAt: new Date(Date.now() + 60000) });
+    await db.collection('downloadTickets').insertOne({ _id: hash(ticket), identity: req.identity, sessionHash: req.sessionHash, orgId: req.org._id, fileId: file._id, representation, expiresAt: new Date(Date.now() + 60000) });
     res.json({ url: `/api/download/${ticket}` });
   });
-  app.get(['/api/file/:id/download', '/api/download/:ticket'], capacity, async (req, res) => {
+  app.get(['/api/file/:id/download', '/api/download/:ticket', '/api/download/:ticket/:representation'], capacity, async (req, res) => {
     try {
       const fileId = req.downloadTicket?.fileId || req.downloadGrant?.fileId || req.params.id;
       const file = idValid(fileId) && await transfers.findOne({ _id: fileId, $or: [
@@ -221,9 +229,10 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
       ], status: 'active', expiresAt: { $gt: new Date() } });
       if (!file) return res.status(404).json({ error: 'File unavailable' });
       if (!await pilot.authorize(file, req.identity, req.org._id, 'read')) return res.status(404).json({ error: 'File unavailable' });
+      const representation=req.downloadTicket?.representation||req.downloadGrant?.representation||'original';
       if (req.downloadTicket) {
-        const value = crypto.randomBytes(32).toString('hex'), url = `/api/download/${file._id}`;
-        await db.collection('downloadGrants').insertOne({ _id: hash(value), identity: req.identity, sessionHash: req.sessionHash, orgId: req.org._id, fileId: file._id, expiresAt: file.expiresAt });
+        const value = crypto.randomBytes(32).toString('hex'), url = `/api/download/${file._id}${representation==='original'?'':'/'+representation}`;
+        await db.collection('downloadGrants').insertOne({ _id: hash(value), identity: req.identity, sessionHash: req.sessionHash, orgId: req.org._id, fileId: file._id, representation, expiresAt: file.expiresAt });
         const liveSession = await sessions.findOne({ _id: req.sessionHash, email: req.identity, expiresAt: { $gt: new Date() } });
         if (!liveSession) {
           await db.collection('downloadGrants').deleteOne({ _id: hash(value) });
@@ -231,9 +240,10 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
         }
         // A file-only capability lets native downloads resume beyond the one-hour app session.
         // It never authenticates other routes; logout, revocation, membership and billing are rechecked.
-        res.cookie(`st_download_${file._id.replaceAll('-', '')}`, value, { httpOnly: true, sameSite: 'strict', secure: config.baseUrl.startsWith('https:'), path: url, expires: file.expiresAt });
+        res.cookie(`st_download_${file._id.replaceAll('-', '')}${representation==='original'?'':'_'+representation}`, value, { httpOnly: true, sameSite: 'strict', secure: config.baseUrl.startsWith('https:'), path: url, expires: file.expiresAt });
         return res.redirect(302, url);
       }
+      if(representation!=='original')return await compressed.serveExport(req,res,file,representation);
       let range;
       try { range = byteRange(req.get('Range'), file.size); }
       catch (error) { if (error.status === 416) return res.status(416).set('Content-Range', `bytes */${file.size}`).end(); throw error; }
@@ -281,7 +291,7 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
   app.use((error, req, res, next) => {
     req.releaseCapacity?.();
     if (res.headersSent) return next(error);
-    const status = error instanceof multer.MulterError ? 413 : error.type === 'entity.too.large' ? 413 : error instanceof SyntaxError && 'body' in error ? 400 : [400, 403, 404, 409, 413, 503].includes(error.status) ? error.status : 500;
+    const status = error instanceof multer.MulterError ? 413 : error.type === 'entity.too.large' ? 413 : error instanceof SyntaxError && 'body' in error ? 400 : [400, 401, 403, 404, 409, 413, 416, 503].includes(error.status) ? error.status : 500;
     if (status === 500) console.error('Request failed:', error.name);
     res.status(status).json({ error: status === 413 ? 'Upload exceeds the allowed limits' : error.status && status !== 500 ? error.message : status === 400 ? 'Invalid JSON' : 'Request could not be completed' });
   });
@@ -291,6 +301,11 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
     try {
       await transfers.updateMany({ $or: [{ status: { $in: ['active', 'quarantined'] }, expiresAt: { $lte: new Date() } }, { status: 'blocked' }] }, { $set: { status: 'deleting' } });
       for await (const file of transfers.find({ status: 'deleting' })) {
+        if(file.purpose==='restore'&&file.restoreState!=='complete'){
+          const restoredId=file.restoredFileId||require('./restore-job').stageId(file._id);
+          await db.collection('uploads').updateOne({_id:restoredId,status:'finalizing'},{$set:{status:'cancelling'}});
+          await transfers.updateOne({_id:restoredId,pendingRestoreParent:file._id,status:'quarantined'},{$set:{status:'deleting'}});
+        }
         await storage.removeRecord(file);
         if (file.orgId && file.reservationId) await pilot.release(file.orgId, file.reservationId);
         await transfers.updateOne({ _id: file._id, status: 'deleting' }, { $set: { status: 'deleted', deletedAt: new Date() }, $unset: { iv: '', tag: '', wrappedKey: '', wrappingIv: '', wrappingTag: '' } });
