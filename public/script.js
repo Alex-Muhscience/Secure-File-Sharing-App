@@ -89,6 +89,23 @@ function clearError(id) {
   $(id).hidden = true;
   $(id).textContent = "";
 }
+let authGeneration = 0;
+const activeActions = new Map();
+function releaseAction(root, record) {
+  if (activeActions.get(root) !== record) return;
+  activeActions.delete(root);
+  root.removeAttribute("aria-busy");
+  record.buttons.forEach((button, index) => {
+    button.disabled = record.original[index];
+  });
+}
+function resetActions() {
+  for (const [root, record] of activeActions) releaseAction(root, record);
+}
+function advanceContext() {
+  revision++;
+  resetActions();
+}
 async function busy(root, action, errorId) {
   if (root.getAttribute("aria-busy") === "true") return;
   const hadFocus = root.matches("button") && document.activeElement === root;
@@ -99,13 +116,21 @@ async function busy(root, action, errorId) {
     ? [root]
     : [...root.querySelectorAll('button[type="submit"]')];
   const original = buttons.map((button) => button.disabled);
+  const record = { buttons, original };
+  activeActions.set(root, record);
   root.setAttribute("aria-busy", "true");
   buttons.forEach((button) => (button.disabled = true));
   if (errorId) clearError(errorId);
   try {
     await action();
   } catch (error) {
-    if (error.stale || error.expired) return;
+    if (
+      started !== revision ||
+      activeActions.get(root) !== record ||
+      error.stale ||
+      error.expired
+    )
+      return;
     const message =
       error.name === "AbortError"
         ? config.resumable?.enabled
@@ -120,11 +145,13 @@ async function busy(root, action, errorId) {
       formError(errorId, message);
     else notify(message, true);
   } finally {
-    root.removeAttribute("aria-busy");
-    buttons.forEach((button, index) => (button.disabled = original[index]));
-    if (root.id === "resend-code") resendLabel();
+    const currentAction =
+      started === revision && activeActions.get(root) === record;
+    if (currentAction) releaseAction(root, record);
+    if (currentAction && root.id === "resend-code") resendLabel();
     if (
       hadFocus &&
+      currentAction &&
       started === revision &&
       document.activeElement === document.body
     ) {
@@ -146,6 +173,7 @@ function expiredSession() {
 }
 async function api(url, options = {}) {
   const requestToken = token,
+    requestRevision = revision,
     headers = new Headers(options.headers);
   if (requestToken) headers.set("Authorization", `Bearer ${requestToken}`);
   if (organization) headers.set("X-Organization-ID", organization);
@@ -156,8 +184,12 @@ async function api(url, options = {}) {
     if (error.name === "AbortError") throw error;
     throw new Error("Could not connect. Check your connection and try again.");
   }
+  if (requestRevision !== revision)
+    throw Object.assign(new Error("Context changed"), { stale: true });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
+    if (requestRevision !== revision)
+      throw Object.assign(new Error("Context changed"), { stale: true });
     if (response.status === 401 && requestToken && requestToken === token)
       throw expiredSession();
     throw new Error(
@@ -208,7 +240,8 @@ for (const dialog of document.querySelectorAll("dialog")) {
   });
 }
 function signedOut() {
-  revision++;
+  authGeneration++;
+  advanceContext();
   activeUpload?.abort();
   token = identity = challenge = organization = null;
   organizations = [];
@@ -251,10 +284,28 @@ function resendLabel() {
   $("resend-code").textContent =
     seconds > 0 ? `Resend in ${seconds}s` : "Resend code";
 }
+async function authPost(url, body, generation) {
+  try {
+    const result = await post(url, body);
+    if (generation !== authGeneration)
+      throw Object.assign(new Error("Sign-in changed"), { stale: true });
+    return result;
+  } catch (error) {
+    if (generation !== authGeneration)
+      throw Object.assign(new Error("Sign-in changed"), { stale: true });
+    throw error;
+  }
+}
 async function requestCode() {
-  const result = await post("/api/request-otp", {
-    email: $("email").value.trim(),
-  });
+  const generation = ++authGeneration,
+    address = $("email").value.trim();
+  const result = await authPost(
+    "/api/request-otp",
+    { email: address },
+    generation,
+  );
+  if (address !== $("email").value.trim())
+    throw Object.assign(new Error("Email changed"), { stale: true });
   challenge = result.sessionId;
   resendUntil = Date.now() + 60000;
   resendLabel();
@@ -282,6 +333,8 @@ $("resend-code").addEventListener("click", () =>
   ),
 );
 $("change-email").addEventListener("click", () => {
+  authGeneration++;
+  resetActions();
   challenge = null;
   $("verify-form").hidden = true;
   $("request-form").hidden = false;
@@ -298,11 +351,13 @@ $("verify-form").addEventListener("submit", (event) => {
   busy(
     event.currentTarget,
     async () => {
-      const result = await post("/api/verify-otp", {
-        sessionId: challenge,
-        otp: $("code").value.trim(),
-      });
-      revision++;
+      const generation = ++authGeneration;
+      const result = await authPost(
+        "/api/verify-otp",
+        { sessionId: challenge, otp: $("code").value.trim() },
+        generation,
+      );
+      advanceContext();
       token = result.token;
       identity = result.email;
       challenge = null;
@@ -396,7 +451,7 @@ async function loadOrganizations() {
       organizations.find(
         (org) => org._id.startsWith("personal_") && org.owner === identity,
       )?._id || organizations[0]?._id;
-    revision++;
+    advanceContext();
   }
   const optionSignature = JSON.stringify(
     organizations.map((org) => [org._id, org.name]),
@@ -866,7 +921,7 @@ $("retry-refresh").addEventListener("click", () =>
   busy($("retry-refresh"), refresh),
 );
 $("organization").addEventListener("change", () => {
-  revision++;
+  advanceContext();
   organization = $("organization").value;
   files = [];
   usage = null;
@@ -1197,7 +1252,7 @@ $("create-org-form").addEventListener("submit", (event) => {
           name: $("org-name").value.trim(),
         });
       if (started !== revision) return;
-      revision++;
+      advanceContext();
       organization = result.organization._id;
       files = [];
       loaded = false;

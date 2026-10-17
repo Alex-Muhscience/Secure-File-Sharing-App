@@ -224,6 +224,11 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config), p
       if (req.downloadTicket) {
         const value = crypto.randomBytes(32).toString('hex'), url = `/api/download/${file._id}`;
         await db.collection('downloadGrants').insertOne({ _id: hash(value), identity: req.identity, sessionHash: req.sessionHash, orgId: req.org._id, fileId: file._id, expiresAt: file.expiresAt });
+        const liveSession = await sessions.findOne({ _id: req.sessionHash, email: req.identity, expiresAt: { $gt: new Date() } });
+        if (!liveSession) {
+          await db.collection('downloadGrants').deleteOne({ _id: hash(value) });
+          return res.status(401).json({ error: 'Download sign-in ended. Sign in and start the download again.' });
+        }
         // A file-only capability lets native downloads resume beyond the one-hour app session.
         // It never authenticates other routes; logout, revocation, membership and billing are rechecked.
         res.cookie(`st_download_${file._id.replaceAll('-', '')}`, value, { httpOnly: true, sameSite: 'strict', secure: config.baseUrl.startsWith('https:'), path: url, expires: file.expiresAt });

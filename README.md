@@ -25,8 +25,8 @@ Owners/admins manage workspace transfers and members; members manage their own f
 
 - Responsive navigation, search and status filters, accessible dialogs, keyboard focus handling, readable errors and retry states. Fonts and icons are served locally.
 - Client analytics for 7/30/90 days, real upload/download totals, measured compression savings, storage quotas, charts and a daily table.
-- Client billing with actual subscription state, entitlements, payment history, terms review and provider status. Empty histories stay empty.
-- Platform client search/pagination, aggregate analytics, guarded manual subscriptions and separate access suspension with audit reasons. Platform access never grants file-content access.
+- Client billing with actual subscription state, entitlements, paginated payment history, terms review and provider status. Empty histories stay empty.
+- Separate platform Clients/Analytics screens, paginated client search, aggregate analytics, guarded manual subscriptions and separate access suspension with audit reasons. Platform access never grants file-content access.
 - Stripe recurring **or prepaid** checkout, M-Pesa prepaid renewals and a configurable crypto adapter. Checkout remains **off** until configured; no prices, currency, administrator identity or merchant credentials are supplied by default.
 - Resumable, encrypted chunk uploads; authenticated range downloads; scanning with backpressure; encrypted streaming snapshots; verified migration and key rewrapping.
 
@@ -135,4 +135,4 @@ OTP codes expire after ten minutes, allow five attempts and can be consumed once
 
 Local MongoDB is unauthenticated on a private network. Filesystem and Garage storage are local single-instance infrastructure. Production requires authenticated/TLS services, managed keys/storage, external email, chosen operator identity, merchant onboarding, backup/rollback/load drills, alerts/support ownership and independent security review. SSO/SCIM, regional redundancy and immutable external audit retention are not implemented. Historical exposed credentials still require provider rotation; Git history has not been rewritten. Legacy models/middleware/utils and the old deployment are historical references, unused by the current runtime.
 
-See [delivery status](docs/DELIVERY_STATUS.md), [operations](docs/OPERATIONS.md), [interface specification](design.md) and the [historical audit](ENTERPRISE_AUDIT_AND_PLAN.md). Changes are reviewed through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6); merging to main requires owner approval.
+See [delivery status](docs/DELIVERY_STATUS.md), [operations](docs/OPERATIONS.md), [interface specification](design.md) and the [historical audit](ENTERPRISE_AUDIT_AND_PLAN.md). The enterprise foundation landed through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6). Final review corrections are in [PR #7](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/7), which requires separate owner approval before merging.

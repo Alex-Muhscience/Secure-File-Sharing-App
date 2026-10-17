@@ -122,6 +122,9 @@ function platformRoutes({ app, db, config, audit }) {
       .updateOne(
         {
           _id: client._id,
+          subscription: client.subscription || { $exists: false },
+          entitlementEpoch: client.entitlementEpoch === undefined ? { $exists: false } : client.entitlementEpoch,
+          adminSuspended: client.adminSuspended === undefined ? { $exists: false } : client.adminSuspended,
           ...(revision === 0
             ? {
                 $or: [
@@ -149,6 +152,7 @@ function platformRoutes({ app, db, config, audit }) {
               updatedBy: req.identity,
             },
           },
+          $inc: { entitlementEpoch: 1 },
         },
       );
     if (!result.modifiedCount)

@@ -244,7 +244,7 @@ const enterprise = (() => {
         !provider.available ||
         role() !== "owner" ||
         (data.subscription.mode === "recurring" &&
-          !["canceled", "expired", "incomplete_expired"].includes(
+          !["canceled", "incomplete_expired"].includes(
             data.subscription.status,
           )) ||
         (data.orders || []).some((order) =>

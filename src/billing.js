@@ -49,10 +49,13 @@ function billingRoutes({ app, db, pilot, config, audit, payments }) {
     if ((org.billingEvents?.length || 0) >= 1000) return res.status(409).json({ error: 'Sandbox event limit reached' });
     const limits = PLANS[plan];
     const result = await pilot.orgs.updateOne({ _id: req.org._id, owner: req.identity, 'billingEvents.id': { $ne: key },
+      adminSuspended: { $ne: true },
+      subscription: req.org.subscription || { $exists: false },
+      entitlementEpoch: req.org.entitlementEpoch === undefined ? { $exists: false } : req.org.entitlementEpoch,
       usedBytes: { $lte: limits.storageBytes }, fileCount: { $lte: limits.files },
       $expr: { $and: [{ $lte: [{ $size: '$members' }, limits.seats] }, { $lt: [{ $size: { $ifNull: ['$billingEvents', []] } }, 1000] }] },
     }, {
-      $set: { plan, status }, $push: { billingEvents: { id: key, fingerprint, ...event, at: new Date() } },
+      $set: { plan, status }, $push: { billingEvents: { id: key, fingerprint, ...event, at: new Date() } }, $inc: { entitlementEpoch: 1 },
     });
     if (!result.modifiedCount) {
       const latest = await pilot.orgs.findOne({ _id: req.org._id });

@@ -199,7 +199,7 @@ class Payments {
       throw fail(400, "Enter a Kenyan M-Pesa number beginning with 254");
     if (
       req.org.subscription?.mode === "recurring" &&
-      !["canceled", "expired", "incomplete_expired"].includes(req.org.subscription.status)
+      !["canceled", "incomplete_expired"].includes(req.org.subscription.status)
     )
       throw fail(
         409,
@@ -239,6 +239,7 @@ class Payments {
       fingerprint,
       orgId: req.org._id,
       owner: req.identity,
+      entitlementEpoch: req.org.entitlementEpoch || 0,
       provider,
       plan,
       mode,
@@ -320,6 +321,7 @@ class Payments {
       const org = await orgs.findOne({ _id: order.orgId });
       if (!org) throw new Error("Payment workspace is unavailable");
       if (org.paidOrders?.includes(order._id)) return true;
+      if ((org.entitlementEpoch || 0) !== (order.entitlementEpoch || 0)) return false;
       if (
         (org.paidOrders?.length || 0) >= 1000 ||
         org.usedBytes > limits.storageBytes ||
@@ -336,6 +338,7 @@ class Payments {
         {
           _id: org._id,
           paidOrders: { $ne: order._id },
+          entitlementEpoch: org.entitlementEpoch === undefined ? { $exists: false } : org.entitlementEpoch,
           ...(org.subscription
             ? { subscription: org.subscription }
             : { subscription: { $exists: false } }),
@@ -352,6 +355,7 @@ class Payments {
             plan: order.plan,
             status: org.adminSuspended ? "suspended" : "active",
             subscription: {
+              orderId: order._id,
               provider: order.provider,
               mode: "prepaid",
               status: "active",
@@ -361,6 +365,7 @@ class Payments {
             },
           },
           $push: { paidOrders: order._id },
+          $inc: { entitlementEpoch: 1 },
         },
       );
       if (result.modifiedCount) return true;
@@ -402,6 +407,12 @@ class Payments {
         throw new Error("Subscription ownership changed");
       const live = await orgs.findOne({ _id: org._id, billingLease: lease });
       if (!live) throw new Error("Subscription lease changed");
+      const controlsCurrent = live.subscription?.provider === 'stripe' && live.subscription.externalId === id;
+      const newOrder = order.status === 'pending' && (live.entitlementEpoch || 0) === (order.entitlementEpoch || 0);
+      if (!controlsCurrent && !newOrder) {
+        if (current.invoice?.status === 'paid') await this.stripeInvoice(current.invoice, current);
+        return { ...current, entitlementApplied: false };
+      }
       const limits = PLANS[current.plan],
         fits =
           live.usedBytes <= limits.storageBytes &&
@@ -413,6 +424,7 @@ class Payments {
         {
           _id: org._id,
           billingLease: lease,
+          entitlementEpoch: live.entitlementEpoch === undefined ? { $exists: false } : live.entitlementEpoch,
           plan: live.plan,
           usedBytes: live.usedBytes,
           fileCount: live.fileCount,
@@ -430,6 +442,7 @@ class Payments {
             plan: fits ? current.plan : live.plan,
             status: active && !live.adminSuspended ? "active" : "suspended",
             subscription: {
+              orderId: order._id,
               provider: "stripe",
               mode: "recurring",
               externalId: id,
@@ -441,12 +454,13 @@ class Payments {
             },
             subscriptionCheckAt: new Date(Date.now() + 60000),
           },
+          ...(!controlsCurrent ? { $inc: { entitlementEpoch: 1 } } : {}),
         },
       );
       if (!changed.modifiedCount)
         throw new Error("Workspace changed during subscription reconciliation");
       if (current.invoice?.status === 'paid') await this.stripeInvoice(current.invoice, current);
-      return current;
+      return { ...current, entitlementApplied: true };
     } finally {
       await orgs.updateOne(
         { _id: org._id, billingLease: lease },
@@ -488,7 +502,7 @@ class Payments {
         if (order.mode === "recurring") {
           if (!verified.subscriptionId)
             throw new Error("Missing recurring subscription");
-          granted = !!(await this.syncSubscription(verified.subscriptionId));
+          granted = (await this.syncSubscription(verified.subscriptionId))?.entitlementApplied === true;
         } else {
           await this.invoice(order, verified.paymentId);
           granted = await this.grant(order);
