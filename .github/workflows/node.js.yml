@@ -12,6 +12,7 @@ jobs:
         image: mongo:7
         ports: [27017:27017]
         options: >-
+          --ulimit nofile=64000:64000
           --health-cmd "mongosh --quiet --eval 'quit(db.adminCommand(\"ping\").ok ? 0 : 1)'"
           --health-interval 5s --health-timeout 5s --health-retries 20
     steps:

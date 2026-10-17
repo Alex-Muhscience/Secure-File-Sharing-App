@@ -8,11 +8,11 @@
     "start": "node app.js",
     "dev": "node --watch app.js",
     "test": "node --test test/*.test.js",
-    "test:integration": "node --test --test-concurrency=2 test/*.cjs",
+    "test:integration": "node --test --test-timeout=120000 --test-concurrency=2 test/*.cjs",
     "check": "node scripts/check.cjs",
     "test:browser": "node test/browser.js",
     "check:secrets": "node scripts/check-secrets.cjs",
-    "test:ui": "node test/ui-browser.js",
+    "test:ui": "node test/ui-browser.js && node test/ui-races.js",
     "format:ui": "prettier --write \"public/*.{html,css,js}\" test/browser.js test/ui-browser.js"
   },
   "engines": {

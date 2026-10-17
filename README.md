@@ -25,8 +25,8 @@ Owners/admins manage workspace transfers and members; members manage their own f
 
 - Responsive navigation, search and status filters, accessible dialogs, keyboard focus handling, readable errors and retry states. Fonts and icons are served locally.
 - Client analytics for 7/30/90 days, real upload/download totals, measured compression savings, storage quotas, charts and a daily table.
-- Client billing with actual subscription state, entitlements, payment history, terms review and provider status. Empty histories stay empty.
-- Platform client search/pagination, aggregate analytics, guarded manual subscriptions and separate access suspension with audit reasons. Platform access never grants file-content access.
+- Client billing with actual subscription state, entitlements, paginated payment history, terms review and provider status. Empty histories stay empty.
+- Separate platform Clients/Analytics screens, paginated client search, aggregate analytics, guarded manual subscriptions and separate access suspension with audit reasons. Platform access never grants file-content access.
 - Stripe recurring **or prepaid** checkout, M-Pesa prepaid renewals and a configurable crypto adapter. Checkout remains **off** until configured; no prices, currency, administrator identity or merchant credentials are supplied by default.
 - Resumable, encrypted chunk uploads; authenticated range downloads; scanning with backpressure; encrypted streaming snapshots; verified migration and key rewrapping.
 

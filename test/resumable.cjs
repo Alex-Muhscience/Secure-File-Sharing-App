@@ -22,7 +22,7 @@ test("resumable encrypted uploads survive retries and process replacement, remai
   const restoredName = `restore_${db.databaseName}`;
   let server;
   t.after(async () => {
-    if (server) await new Promise((resolve) => server.close(resolve));
+    if (server) { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
     await db.dropDatabase();
     await client.db(restoredName).dropDatabase();
     await client.close();
@@ -255,6 +255,24 @@ test("resumable encrypted uploads survive retries and process replacement, remai
   assert.equal((await request(nativeUrl, null, null, 'GET', null, { ...nativeHeaders, Range: 'bytes=0-9' })).status, 206);
   assert.equal((await request('/api/logout', nativeToken, null, 'POST', {})).status, 200);
   assert.equal((await request(nativeUrl, null, null, 'GET', null, nativeHeaders)).status, 401);
+  const raceToken = crypto.randomBytes(32).toString('hex');
+  await db.collection('sessions').insertOne({ _id: hash(raceToken), email: 'owner@example.com', expiresAt: new Date(Date.now() + 3600000) });
+  const raceTicket = await (await request(`/api/file/${file._id}/download-ticket`, raceToken, org._id, 'POST', {})).json();
+  let releaseHandoff, handoffStarted;
+  const blockedHandoff = new Promise(resolve => { handoffStarted = resolve; });
+  const handoffGate = new Promise(resolve => { releaseHandoff = resolve; });
+  const originalAuthorize = running.pilot.authorize.bind(running.pilot);
+  running.pilot.authorize = async (...args) => { const permission = await originalAuthorize(...args); handoffStarted(); await handoffGate; return permission; };
+  try {
+    const pendingHandoff = fetch(base + raceTicket.url, { redirect: 'manual' });
+    await blockedHandoff;
+    assert.equal((await request('/api/logout', raceToken, null, 'POST', {})).status, 200);
+    releaseHandoff();
+    const result = await pendingHandoff;
+    assert.equal(result.status, 401, 'Logout during ticket handoff must prevent creation of usable download access');
+    assert.equal(await db.collection('downloadGrants').countDocuments({ sessionHash: hash(raceToken) }), 0);
+    assert.equal(result.headers.get('set-cookie'), null);
+  } finally { releaseHandoff(); running.pilot.authorize = originalAuthorize; }
   const part = await db
     .collection("chunks")
     .findOne({ uploadId: file._id, index: 0 });

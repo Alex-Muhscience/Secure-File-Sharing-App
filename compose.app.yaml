@@ -33,6 +33,8 @@ services:
       retries: 5
   mongo:
     image: mongo:7
+    ulimits:
+      nofile: {soft: 64000, hard: 64000}
     volumes: ["database:/data/db"]
     networks: [backend]
     restart: unless-stopped

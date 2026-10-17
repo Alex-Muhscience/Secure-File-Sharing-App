@@ -81,4 +81,18 @@ test('authorization and quota state changes cannot use stale workspace snapshots
   assert.equal((await pilot.orgs.findOne({ _id: org })).usedBytes, 6);
   assert.equal((await fs.readdir(directory)).length, 1);
   assert.equal(file.size, 6);
+  for (const [label, changed] of [['paid grant', { subscription: { provider: 'mpesa', mode: 'prepaid', status: 'active', revision: 1, periodEnd: new Date(Date.now() + 86400000) }, plan: 'team', status: 'active' }], ['operator pause', { adminSuspended: true, status: 'suspended' }]]) await t.test(`sandbox cannot overwrite concurrent ${label}`, async () => {
+    await pilot.orgs.updateOne({ _id: org }, { $set: { plan: 'pilot', status: 'active', adminSuspended: false }, $unset: { subscription: '' } });
+    const originalFind = pilot.orgs.findOne.bind(pilot.orgs); let injected = false;
+    pilot.orgs.findOne = async (filter, ...args) => {
+      const snapshot = await originalFind(filter, ...args);
+      if (!injected && filter._id === org && Object.keys(filter).length === 1) { injected = true; await db.collection('organizations').updateOne({ _id: org }, { $set: changed }); }
+      return snapshot;
+    };
+    try {
+      const response = await request('/api/billing/sandbox/events', owner, org, 'POST', { eventId: `sandbox_race_${label.replaceAll(' ', '_')}`, plan: 'enterprise', status: 'active' });
+      assert.equal(response.status, 409, label);
+      assert.equal((await db.collection('organizations').findOne({ _id: org })).plan, changed.plan || 'pilot');
+    } finally { pilot.orgs.findOne = originalFind; }
+  });
 });
