@@ -1,6 +1,6 @@
 # Industry workflows and a measured custom compression engine
 
-Status: proposed written design; awaiting owner review. Working version: v0.6.0.
+Status: owner approved the written design on 2026-10-17 and requested a revision to the implementation plan; revision details are pending. Working version: v0.6.0.
 
 ## Intent and agreed scope
 
