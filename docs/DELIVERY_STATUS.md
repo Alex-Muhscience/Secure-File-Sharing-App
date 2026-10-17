@@ -1,6 +1,6 @@
 # Delivery status
 
-Version: **v0.5.0 local enterprise pilot**, reviewed through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6). The user requested compact workflows, navy/scarlet/white styling, client/platform dashboards, configurable Stripe/M-Pesa/crypto billing and a 1–5 TB file target. Repository delivery and external production acceptance are separate.
+Version: **v0.5.0 local enterprise pilot**, foundation delivered through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6), with review corrections in [PR #7](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/7). The user requested compact workflows, navy/scarlet/white styling, client/platform dashboards, configurable Stripe/M-Pesa/crypto billing and a 1–5 TB file target. Repository delivery and external production acceptance are separate.
 
 | Capability | Repository implementation | Remaining external acceptance |
 | --- | --- | --- |
@@ -29,4 +29,4 @@ Historical exposed credentials require provider rotation; Git history was not re
 
 ## Release process
 
-Keep user skill-installation files outside the application commits. Stage reviewed paths only, preserve ignored keys/data/backups, publish the feature branch and PR checks, then tag the verified release commit. **Merge to main requires explicit owner approval for PR #6.** Earlier approval for PR #5 does not authorize this merge. See [operations](OPERATIONS.md), [billing](BILLING.md), [large files](LARGE_FILES.md), and the [implementation plan](superpowers/plans/2026-10-17-enterprise-workspace.md).
+Keep user skill-installation files outside the application commits. Stage reviewed paths only, preserve ignored keys/data/backups, publish the feature branch and PR checks, then tag the verified release commit. **Merge to main requires explicit owner approval for PR #7.** PR #6 was already merged when the review-fix publication was prepared; this follow-up needs separate approval. See [operations](OPERATIONS.md), [billing](BILLING.md), [large files](LARGE_FILES.md), and the [implementation plan](superpowers/plans/2026-10-17-enterprise-workspace.md).

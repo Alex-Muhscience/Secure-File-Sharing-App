@@ -81,5 +81,7 @@ The user selected Stripe, M-Pesa, and configurable crypto payments, with no cryp
 - [x] Update README, operations, design and delivery status around the actual finished scope and configured limits.
 - [x] Run syntax, core, tenant/platform/storage/backup integration, UI failure, axe and real browser tests locally; remote CI remains a publication gate.
 - [x] Inspect final desktop/mobile/wizard/admin/client dashboards, including empty/loading/error states, long labels and keyboard navigation.
-- [x] Stage only intended source/assets, run secret/ignore checks, commit and push PR updates. Initial implementation CI passed; final fix commit must also pass remote checks.
-- [ ] Publish a version tag for a verified commit and ask whether to merge to main. Do not merge without the user's approval for this PR.
+- [x] Stage only intended source/assets, run secret/ignore checks, commit and push PR updates. Initial implementation CI passed; final follow-up results are tracked in PR #7.
+- [ ] Owner approves merging the final follow-up PR #7 to main. Do not merge without this separate approval. Release-tag publication and current validation are tracked on that PR.
+
+Release tracking: PR #6 was already merged on GitHub when the review corrections were published. PR #7 contains the tested corrections and final release evidence; the existing feature branch is preserved. The operator must separately approve that merge. All repository implementation tasks are verified locally; external production gates remain as documented.

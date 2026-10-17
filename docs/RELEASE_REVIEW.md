@@ -24,4 +24,4 @@ The full local suite after correction includes 10 core tests, 17 integration tes
 - Sampled file fingerprints remain a selection hint during resume, requiring the unmodified original. Chunk checksums protect transmission, but the cost is no full local-file identity proof when a user deliberately or accidentally changes a same-metadata middle segment.
 - Non-Chromium download managers and human usability/accessibility are not validated by the current automated evidence. Chromium/reflow/axe/visual checks passed; the cost is additional client/browser acceptance before broad rollout.
 
-No merge to main is authorized by these checks. The repository owner must approve PR #6 separately.
+No merge to main is authorized by these checks. The enterprise foundation was already merged through PR #6. The repository owner must approve the correction PR #7 separately.
