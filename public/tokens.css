@@ -1,0 +1,51 @@
+/* Secure Transfer: navy, scarlet and white. Runtime design tokens. */
+:root {
+  --color-navy: oklch(0.244166 0.05878 263.2798); /* #111f3c */
+  --color-navy-soft: oklch(0.304448 0.06614 262.093); /* #1c2e50 */
+  --color-navy-hover: oklch(0.357602 0.069976 261.0931); /* #273c61 */
+  --color-navy-muted: oklch(0.833277 0.03223 261.73); /* #bdc9de */
+  --color-paper: oklch(1 0 0); /* #ffffff */
+  --color-canvas: oklch(0.979215 0.004124 271.37); /* #f7f8fb */
+  --color-ink: oklch(0.258136 0.05072 262.5228); /* #16233c */
+  --color-muted: oklch(0.515433 0.034516 262.3902); /* #5d687c */
+  --color-rule: oklch(0.926941 0.010406 261.7884); /* #e3e7ee */
+  --color-input-border: oklch(0.661191 0.029158 262.2902); /* #8993a5 */
+  --color-accent: oklch(0.54347 0.198129 19.6075); /* #c9233d */
+  --color-accent-hover: oklch(0.483506 0.179579 19.9489); /* #ad1931 */
+  --color-accent-soft: oklch(0.967496 0.016402 8.1625); /* #fff0f2 */
+  --color-accent-ink: oklch(1 0 0); /* #ffffff */
+  --color-focus: oklch(0.498498 0.143199 260.9767); /* #305fb3 */
+  --color-info: oklch(0.42905 0.110229 259.4636); /* #284e8b */
+  --color-info-soft: oklch(0.963118 0.01733 264.4865); /* #edf3ff */
+  --color-scrim: oklch(0.244166 0.05878 263.2798); /* #111f3c */
+  --color-skeleton: oklch(0.945079 0.010355 261.7887); /* #e9edf4 */
+  --font-body: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display:
+    "Bricolage Grotesque", "Instrument Sans", ui-sans-serif, sans-serif;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-title: clamp(1.75rem, 2.5vw, 2.25rem);
+  --text-display: clamp(2.5rem, 4.5vw, 4rem);
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --dur-micro: 120ms;
+  --dur-short: 180ms;
+  --shadow-dialog: 0 24px 80px oklch(0.12 0.04 264 / 0.22);
+  --shadow-toast: 0 8px 32px oklch(0.12 0.04 264 / 0.12);
+}

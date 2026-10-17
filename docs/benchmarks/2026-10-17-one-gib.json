@@ -1,0 +1,15 @@
+{
+  "runtime": "v24.21.0",
+  "storage": "filesystem",
+  "fixture": "Each 8 MiB part contains 25% independent random bytes and 75% repeated A bytes",
+  "scanner": "Counting fixture; not a malware-scanner benchmark",
+  "logicalBytes": 1073741824,
+  "storedBytes": 268707965,
+  "compressionReductionPercent": 74.975,
+  "chunkBytes": 8388608,
+  "uploadSeconds": 32.84,
+  "verificationSeconds": 13.02,
+  "downloadSeconds": 18.92,
+  "peakRssMiB": 180.4,
+  "sha256Match": true
+}

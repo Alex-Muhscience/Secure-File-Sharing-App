@@ -9,7 +9,6 @@ services:
       MONGO_URI: mongodb://mongo:27017/secure_transfer
       SMTP_HOST: mail
       SMTP_PORT: 1025
-      APP_URL: http://localhost:3081
       STORAGE_DIR: /app/data/objects
       SCANNER_HOST: scanner
       BILLING_SANDBOX: "true"
@@ -49,12 +48,11 @@ services:
       MONGO_URI: mongodb://mongo:27017/secure_transfer
       SMTP_HOST: mail
       SMTP_PORT: 1025
-      APP_URL: http://localhost:3081
       STORAGE_DIR: /app/data/objects
       SCANNER_HOST: scanner
       WORKER_ONLY: "true"
     volumes: ["objects:/app/data"]
-    networks: [backend]
+    networks: [backend, edge]
     depends_on:
       mongo: {condition: service_healthy}
       scanner: {condition: service_healthy}

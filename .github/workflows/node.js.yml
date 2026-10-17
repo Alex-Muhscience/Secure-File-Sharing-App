@@ -30,16 +30,28 @@ jobs:
           TEST_MONGO_URI: mongodb://127.0.0.1:27017
       - run: node scripts/init-local.cjs
       - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui
       - run: docker compose --env-file /dev/null -f compose.app.yaml up -d --build --wait
       - run: docker compose --env-file /dev/null -f compose.app.yaml exec -T app node < scripts/smoke.cjs
       - run: npm run test:browser
+        env:
+          BROWSER_STORAGE: filesystem
       - run: bash scripts/backup-local.sh
       - run: node scripts/init-s3.cjs
       - run: docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml up -d --build --wait
-      - run: docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml run --rm --no-deps --user root -v "$PWD/test:/app/test:ro" -e TEST_MONGO_URI=mongodb://mongo:27017 -e TEST_S3=true app node --test test/s3.cjs
+      - run: docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml run --rm --no-deps --user root -v "$PWD/test:/app/test:ro" -e TEST_MONGO_URI=mongodb://mongo:27017 -e TEST_S3=true app npm run test:integration
       - run: docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml exec -T app node < scripts/smoke.cjs
       - run: npm run test:browser
+        env:
+          BROWSER_STORAGE: s3
       - run: bash scripts/backup-local.sh s3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interface-verification
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
       - if: always()
         run: |
           if [ -f .env.s3 ]; then

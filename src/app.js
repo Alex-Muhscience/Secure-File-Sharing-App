@@ -5,13 +5,21 @@ const path = require('node:path');
 const { Pilot } = require('./pilot');
 const { organizationRoutes } = require('./organization-routes');
 const { billingRoutes } = require('./billing');
+const { analyticsRoutes } = require('./analytics');
+const { platformRoutes } = require('./platform');
+const { resumableRoutes } = require('./segments');
+const { Readable } = require('node:stream');
+const { pipeline } = require('node:stream/promises');
+const { Payments } = require('./payments');
 const { createAudit, auditRoutes } = require('./audit');
 const { Worker } = require('./worker');
 const { Scanner } = require('./scanner');
+const { byteRange } = require('./ranges');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const email = value => typeof value === 'string' && value.length <= 254 && /^[a-z\d.!#$%&'*+/=?^_`{|}~-]+@[a-z\d](?:[a-z\d-]*[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]*[a-z\d])?)+$/i.test(value) ? value.toLowerCase() : null;
 const idValid = value => typeof value === 'string' && /^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/.test(value);
-function createApp({ config, db, storage, mail, scanner = new Scanner(config) }) {
+function createApp({ config, db, storage, mail, scanner = new Scanner(config), paymentGateway }) {
+  storage.attach(db);
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -20,10 +28,10 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
     if (req.path.startsWith('/api')) res.set('Cache-Control', 'no-store');
     next();
   });
-  app.use(express.json({ limit: '16kb' }));
   const challenges = db.collection('challenges'), sessions = db.collection('sessions'), transfers = db.collection('transfers');
   const audit = createAudit(db), pilot = new Pilot(db);
-  const worker = new Worker({ config, db, storage, mail, scanner, audit });
+  const payments = new Payments({ config, db, gateway: paymentGateway });
+  const worker = new Worker({ config, db, storage, mail, scanner, audit, payments });
   const digest = (id, code) => crypto.createHmac('sha256', config.otpSecret).update(`${id}:${code}`).digest('hex');
   const limit = (scope, max, windowMs) => async (req, res, next) => {
     const now = Date.now();
@@ -34,12 +42,20 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
     if (record.count > max) return res.status(429).json({ error: 'Too many requests. Try again later.' });
     next();
   };
+  payments.publicRoutes(app, limit('payment-callbacks', 60, 60000));
+  app.use(express.json({ limit: '16kb' }));
   app.get('/health', (req, res) => res.json({ status: 'alive' }));
   app.get('/ready', async (req, res) => {
     try { await db.command({ ping: 1 }); await storage.ready(); res.json({ status: 'ready' }); }
     catch { res.status(503).json({ status: 'unavailable' }); }
   });
-  app.use('/api', limit('api', 200, 60000));
+  const apiLimit = limit('api', 200, 60000), chunkLimit = limit('chunks', 2000, 60000);
+  app.use('/api', (req, res, next) => /^\/uploads\/[^/]+\/chunks$/.test(req.path) ? chunkLimit(req, res, next) : apiLimit(req, res, next));
+  app.get('/api/config', (req, res) => {
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(config.baseUrl).hostname);
+    res.json({ maxFileSize: Math.min(config.maxSize, config.scanMaxSize), billingSandbox: config.billingSandbox, resumable: { enabled: true, chunkSize: config.chunkSize },
+      inboxUrl: local && config.smtp.host === 'mail' ? 'http://localhost:8025' : null });
+  });
   app.post('/api/request-otp', limit('otp', 10, 900000), async (req, res) => {
     const address = email(req.body.email);
     if (!address) return res.status(400).json({ error: 'Enter a valid email address' });
@@ -69,20 +85,47 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
     await audit('SIGN_IN', challenge._id);
     res.json({ success: true, token, email: challenge._id });
   });
+  app.post('/api/logout', async (req, res) => {
+    const token = req.get('Authorization')?.match(/^Bearer ([a-f\d]{64})$/)?.[1];
+    if (!token) return res.json({ success: true });
+    const sessionHash = hash(token);
+    await sessions.deleteOne({ _id: sessionHash });
+    await db.collection('downloadTickets').deleteMany({ sessionHash });
+    await db.collection('downloadGrants').deleteMany({ sessionHash });
+    res.json({ success: true });
+  });
   app.use('/api', async (req, res, next) => {
+    const downloadId = req.method === 'GET' && req.path.match(/^\/download\/([a-f\d-]{36})$/)?.[1];
+    if (downloadId && idValid(downloadId)) {
+      const cookieName = `st_download_${downloadId.replaceAll('-', '')}`;
+      const value = (req.get('Cookie') || '').split(';').map(part => part.trim()).find(part => part.startsWith(cookieName + '='))?.slice(cookieName.length + 1);
+      const grant = /^[a-f\d]{64}$/.test(value || '') && await db.collection('downloadGrants').findOne({ _id: hash(value), fileId: downloadId, expiresAt: { $gt: new Date() } });
+      if (!grant) return res.status(401).json({ error: 'Download access expired. Sign in and start the download again.' });
+      req.identity = grant.identity; req.sessionHash = grant.sessionHash; req.contextOrganization = grant.orgId; req.downloadGrant = grant;
+      return next();
+    }
+    const ticketToken = req.method === 'GET' && req.path.match(/^\/download\/([a-f\d]{64})$/)?.[1];
+    if (ticketToken) {
+      const ticket = await db.collection('downloadTickets').findOneAndDelete({ _id: hash(ticketToken), expiresAt: { $gt: new Date() } });
+      const session = ticket && await sessions.findOne({ _id: ticket.sessionHash, email: ticket.identity, expiresAt: { $gt: new Date() } });
+      if (!session) return res.status(401).json({ error: 'Download link expired. Sign in and start the download again.' });
+      req.identity = ticket.identity; req.sessionHash = ticket.sessionHash; req.contextOrganization = ticket.orgId; req.downloadTicket = ticket;
+      return next();
+    }
     const token = req.get('Authorization')?.match(/^Bearer ([a-f\d]{64})$/)?.[1];
     const session = token && await sessions.findOne({ _id: hash(token), expiresAt: { $gt: new Date() } });
     if (!session) return res.status(401).json({ error: 'Sign in to continue' });
     req.identity = session.email; req.sessionHash = session._id; next();
   });
-  app.post('/api/logout', async (req, res) => { await sessions.deleteOne({ _id: req.sessionHash }); res.json({ success: true }); });
+  platformRoutes({ app, db, config, audit });
   organizationRoutes({ app, db, pilot, audit, email });
   app.use('/api', async (req, res, next) => {
     req.org = await pilot.context(req);
     if (!req.org) return res.status(404).json({ error: 'Workspace unavailable' });
     next();
   });
-  billingRoutes({ app, db, pilot, config, audit });
+  billingRoutes({ app, db, pilot, config, audit, payments });
+  analyticsRoutes({ app, db });
   auditRoutes({ app, db });
   app.get('/api/operations', async (req, res) => {
     if (!['owner', 'admin'].includes(req.org.role)) return res.status(403).json({ error: 'Administrator access required' });
@@ -101,11 +144,13 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
     res.once('finish', release);
     next();
   };
+  resumableRoutes({ app, db, config, storage, pilot, audit, email, idValid, capacity });
   app.post('/api/upload', capacity, async (req, res, next) => {
     if (req.org.status !== 'active' || req.org.role === 'viewer') return res.status(403).json({ error: 'This workspace cannot upload files' });
     const declared = req.get('X-File-Size');
-    if (declared !== undefined && (!/^\d{1,8}$/.test(declared) || Number(declared) > config.maxSize)) return res.status(400).json({ error: 'Invalid file size' });
-    req.uploadLimit = declared === undefined ? config.maxSize : Number(declared);
+    const legacyLimit = Math.min(config.maxSize, config.scanMaxSize, 25 * 1024 * 1024);
+    if (declared !== undefined && (!/^\d{1,8}$/.test(declared) || Number(declared) > legacyLimit)) return res.status(400).json({ error: 'Use resumable upload for files over 25 MB' });
+    req.uploadLimit = declared === undefined ? legacyLimit : Number(declared);
     req.reservationId = await pilot.reserve(req.org, req.uploadLimit);
     if (!req.reservationId) return res.status(409).json({ error: 'Workspace storage or file quota reached' });
     next();
@@ -152,30 +197,65 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
     }
   });
   app.get('/api/files', async (req, res) => {
-    const files = await transfers.find({ $or: [
+    const requested = req.query.transfer;
+    if (requested !== undefined && !idValid(requested)) return res.status(400).json({ error: 'Invalid transfer link' });
+    const files = await transfers.find({ ...(requested ? { _id: requested } : {}), $or: [
       { orgId: req.org._id, ...(['owner', 'admin'].includes(req.org.role) ? {} : { owner: req.identity }) },
       { recipient: req.identity, recipientRevoked: { $ne: true } },
     ] }, { projection: { name: 1, owner: 1, recipient: 1, recipientRevoked: 1, orgId: 1, size: 1, status: 1, downloads: 1, expiresAt: 1, createdAt: 1, scanResult: 1 } }).sort({ createdAt: -1 }).limit(100).toArray();
     res.json({ files: await pilot.visible(files, req.identity, req.org._id) });
   });
-  app.get('/api/file/:id/download', capacity, async (req, res) => {
+  app.post('/api/file/:id/download-ticket', async (req, res) => {
+    const file = idValid(req.params.id) && await transfers.findOne({ _id: req.params.id, status: 'active', expiresAt: { $gt: new Date() } });
+    if (!file || !await pilot.authorize(file, req.identity, req.org._id, 'read')) return res.status(404).json({ error: 'File unavailable' });
+    const ticket = crypto.randomBytes(32).toString('hex');
+    await db.collection('downloadTickets').insertOne({ _id: hash(ticket), identity: req.identity, sessionHash: req.sessionHash, orgId: req.org._id, fileId: file._id, expiresAt: new Date(Date.now() + 60000) });
+    res.json({ url: `/api/download/${ticket}` });
+  });
+  app.get(['/api/file/:id/download', '/api/download/:ticket'], capacity, async (req, res) => {
     try {
-      const file = idValid(req.params.id) && await transfers.findOne({ _id: req.params.id, $or: [
+      const fileId = req.downloadTicket?.fileId || req.downloadGrant?.fileId || req.params.id;
+      const file = idValid(fileId) && await transfers.findOne({ _id: fileId, $or: [
         { orgId: req.org._id, ...(['owner', 'admin'].includes(req.org.role) ? {} : { owner: req.identity }) },
         { recipient: req.identity, recipientRevoked: { $ne: true } },
       ], status: 'active', expiresAt: { $gt: new Date() } });
       if (!file) return res.status(404).json({ error: 'File unavailable' });
       if (!await pilot.authorize(file, req.identity, req.org._id, 'read')) return res.status(404).json({ error: 'File unavailable' });
-      const bytes = await storage.decrypt(file);
+      if (req.downloadTicket) {
+        const value = crypto.randomBytes(32).toString('hex'), url = `/api/download/${file._id}`;
+        await db.collection('downloadGrants').insertOne({ _id: hash(value), identity: req.identity, sessionHash: req.sessionHash, orgId: req.org._id, fileId: file._id, expiresAt: file.expiresAt });
+        // A file-only capability lets native downloads resume beyond the one-hour app session.
+        // It never authenticates other routes; logout, revocation, membership and billing are rechecked.
+        res.cookie(`st_download_${file._id.replaceAll('-', '')}`, value, { httpOnly: true, sameSite: 'strict', secure: config.baseUrl.startsWith('https:'), path: url, expires: file.expiresAt });
+        return res.redirect(302, url);
+      }
+      let range;
+      try { range = byteRange(req.get('Range'), file.size); }
+      catch (error) { if (error.status === 416) return res.status(416).set('Content-Range', `bytes */${file.size}`).end(); throw error; }
+      // Verify the manifest before headers; each bounded part is authenticated before release.
+      if (file.format === 'segments-v1') await storage.segmented.verifyManifest(file);
+      const bytes = file.format === 'segments-v1' ? null : await storage.decrypt(file);
       const permission = await pilot.permission(file, req.identity, req.org._id);
       if (!permission.allowed) return res.status(404).json({ error: 'File unavailable' });
       // Recheck access after reading/authenticating, in case the owner revoked it.
       const access = await transfers.updateOne({ _id: file._id, status: 'active', expiresAt: { $gt: new Date() }, ...(!permission.administrative && file.owner !== req.identity ? { recipientRevoked: { $ne: true } } : {}) }, { $inc: { downloads: 1 } });
       if (!access.modifiedCount) return res.status(404).json({ error: 'File unavailable' });
       await audit('DOWNLOAD', req.identity, file._id, file.orgId);
-      await db.collection('usage').insertOne({ _id: crypto.randomUUID(), orgId: file.orgId, type: 'download', bytes: file.size, fileId: file._id, at: new Date() });
-      res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(file.name).replace(/'/g, '%27')}` });
-      res.send(bytes);
+      await db.collection('usage').insertOne({ _id: crypto.randomUUID(), orgId: file.orgId, type: 'download', bytes: range.length, fileId: file._id, at: new Date() });
+      res.status(range.partial ? 206 : 200).set({ 'Accept-Ranges': 'bytes', 'Content-Length': String(range.length), 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(file.name.toWellFormed()).replace(/'/g, '%27')}` });
+      if (range.partial) res.set('Content-Range', `bytes ${range.start}-${range.end}/${file.size}`);
+      if (bytes) res.send(bytes.subarray(range.start, range.end + 1));
+      else {
+        async function* authorized() {
+          for await (const chunk of storage.plaintext(file, range, true)) {
+            const current = await transfers.findOne({ _id: file._id, status: 'active', expiresAt: { $gt: new Date() } });
+            const grant = !req.downloadGrant || await db.collection('downloadGrants').findOne({ _id: req.downloadGrant._id, expiresAt: { $gt: new Date() } });
+            if (!grant || !current || !await pilot.authorize(current, req.identity, req.org._id, 'read')) throw new Error('Download access ended');
+            yield chunk;
+          }
+        }
+        await pipeline(Readable.from(authorized()), res);
+      }
     } finally { req.releaseCapacity(); }
   });
   app.delete('/api/file/:id', async (req, res) => {
@@ -196,9 +276,9 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
   app.use((error, req, res, next) => {
     req.releaseCapacity?.();
     if (res.headersSent) return next(error);
-    const status = error instanceof multer.MulterError ? 413 : error.type === 'entity.too.large' ? 413 : error instanceof SyntaxError && 'body' in error ? 400 : 500;
+    const status = error instanceof multer.MulterError ? 413 : error.type === 'entity.too.large' ? 413 : error instanceof SyntaxError && 'body' in error ? 400 : [400, 403, 404, 409, 413, 503].includes(error.status) ? error.status : 500;
     if (status === 500) console.error('Request failed:', error.name);
-    res.status(status).json({ error: status === 413 ? 'Upload exceeds the allowed limits' : status === 400 ? 'Invalid JSON' : 'Request could not be completed' });
+    res.status(status).json({ error: status === 413 ? 'Upload exceeds the allowed limits' : error.status && status !== 500 ? error.message : status === 400 ? 'Invalid JSON' : 'Request could not be completed' });
   });
   let cleaning = false;
   async function cleanup() {
@@ -210,17 +290,28 @@ function createApp({ config, db, storage, mail, scanner = new Scanner(config) })
         if (file.orgId && file.reservationId) await pilot.release(file.orgId, file.reservationId);
         await transfers.updateOne({ _id: file._id, status: 'deleting' }, { $set: { status: 'deleted', deletedAt: new Date() }, $unset: { iv: '', tag: '', wrappedKey: '', wrappingIv: '', wrappingTag: '' } });
       }
+      await storage.segmented.cleanup(pilot);
       await pilot.reconcile();
       // Keep verified migration copies until the transfer itself is deleted.
       const cutoff = new Date(Date.now() - 3600000);
+      let batch = [];
+      const sweep = async () => {
+        if (!batch.length) return;
+        const ids = batch.map(object => object.id);
+        const [files, parts] = await Promise.all([
+          transfers.find({ objectId: { $in: ids }, status: { $ne: 'deleted' } }, { projection: { objectId: 1, storageBackend: 1, retainedBackends: 1 } }).toArray(),
+          db.collection('chunks').find({ objectId: { $in: ids } }, { projection: { objectId: 1, storageBackend: 1, retainedBackends: 1 } }).toArray(),
+        ]);
+        const referenced = new Set([...files, ...parts].flatMap(row => [row.storageBackend || 'filesystem', ...(row.retainedBackends || [])].map(backend => `${backend}:${row.objectId}`)));
+        for (const object of batch) if (!referenced.has(`${object.backend}:${object.id}`)) await storage.remove(object.id, object.backend);
+        batch = [];
+      };
       for await (const object of storage.list()) {
         if (object.modifiedAt >= cutoff) continue;
-        const referenced = await transfers.findOne({ objectId: object.id, status: { $ne: 'deleted' }, $or: [
-          { storageBackend: object.backend }, { retainedBackends: object.backend },
-          ...(object.backend === 'filesystem' ? [{ storageBackend: { $exists: false } }] : []),
-        ] });
-        if (!referenced) await storage.remove(object.id, object.backend);
+        batch.push(object);
+        if (batch.length >= 1000) await sweep();
       }
+      await sweep();
       await storage.cleanupMultipart(cutoff);
     } finally { cleaning = false; }
   }

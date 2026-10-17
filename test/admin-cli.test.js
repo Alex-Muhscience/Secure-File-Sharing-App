@@ -1,0 +1,22 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const execute = promisify(execFile);
+test('operator setup preserves existing keys and rejects invalid grants without modifying configuration', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'admin-cli-')); t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const file = path.join(directory, '.env.local'), initial = 'ENCRYPTION_KEY=existing-key\nOTP_SECRET=existing-otp\n';
+  await fs.writeFile(file, initial);
+  const script = path.join(__dirname, '../scripts/configure-admin.cjs');
+  await execute(process.execPath, [script, 'operator@example.com'], { cwd: directory });
+  assert.equal(await fs.readFile(file, 'utf8'), initial + 'PLATFORM_ADMIN_EMAILS=operator@example.com\n');
+  const preserved = await fs.readFile(file, 'utf8');
+  await assert.rejects(execute(process.execPath, [script, 'invalid email'], { cwd: directory }));
+  assert.equal(await fs.readFile(file, 'utf8'), preserved);
+  await execute(process.execPath, [script, 'operator@example.com', '--remove'], { cwd: directory });
+  assert.equal(await fs.readFile(file, 'utf8'), initial + 'PLATFORM_ADMIN_EMAILS=\n');
+  assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
+});

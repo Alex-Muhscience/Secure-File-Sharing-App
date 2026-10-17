@@ -30,6 +30,10 @@ test('Mongo-backed transfer lifecycle, OTP races, authorization, expiry, tamper 
   let base = `http://127.0.0.1:${server.address().port}`;
   const request = (url, token, method = 'GET', body) => fetch(base + url, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}) }, body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
   assert.equal((await request('/ready')).status, 200);
+  assert.deepEqual(await (await request('/api/config')).json(), { maxFileSize: 1024, billingSandbox: false, inboxUrl: 'http://localhost:8025', resumable: { enabled: true, chunkSize: 8388608 } });
+  const localBase = config.baseUrl; config.baseUrl = 'https://files.example.com';
+  assert.deepEqual(await (await request('/api/config')).json(), { maxFileSize: 1024, billingSandbox: false, inboxUrl: null, resumable: { enabled: true, chunkSize: 8388608 } });
+  config.baseUrl = localBase;
   for (const address of ['a,b@example.com', 'a(comment)@example.com', 'a@example.com\r\nBcc: victim@example.com']) {
     assert.equal((await request('/api/request-otp', null, 'POST', { email: address })).status, 400);
   }
@@ -68,6 +72,16 @@ test('Mongo-backed transfer lifecycle, OTP races, authorization, expiry, tamper 
   assert.equal((await request(`/api/file/${fileId}/download`, stranger)).status, 404);
   assert.equal((await request(`/api/file/${fileId}`, recipient, 'DELETE')).status, 404);
   assert.equal((await (await request('/api/files', stranger)).json()).files.length, 0);
+  assert.equal((await request('/api/files?transfer=invalid', recipient)).status, 400);
+  assert.deepEqual((await (await request(`/api/files?transfer=${fileId}`, stranger)).json()).files, []);
+  // A shared link must resolve even when the file falls outside the latest 100 rows.
+  const source = await db.collection('transfers').findOne({ _id: fileId });
+  const history = Array.from({ length: 101 }, (_, index) => ({ ...source, _id: crypto.randomUUID(), status: 'deleted', createdAt: new Date(Date.now() + index + 1) }));
+  await db.collection('transfers').insertMany(history);
+  assert.equal((await (await request('/api/files', recipient)).json()).files.some(file => file._id === fileId), false);
+  const targeted = (await (await request(`/api/files?transfer=${fileId}`, recipient)).json()).files;
+  assert.equal(targeted.length, 1); assert.equal(targeted[0]._id, fileId); assert.equal(targeted[0].wrappedKey, undefined);
+  await db.collection('transfers').deleteMany({ _id: { $in: history.map(file => file._id) } });
   let download = await request(`/api/file/${fileId}/download`, recipient);
   assert.equal(download.status, 200); assert.match(download.headers.get('content-disposition'), /^attachment/); assert.deepEqual(Buffer.from(await download.arrayBuffer()), bytes);
   assert.equal((await upload(Buffer.alloc(2048))).status, 413);

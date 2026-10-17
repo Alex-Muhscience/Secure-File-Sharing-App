@@ -1,6 +1,6 @@
 {
   "name": "secure-file-sharing-platform",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Email-verified encrypted file transfers",
   "main": "app.js",
@@ -8,23 +8,29 @@
     "start": "node app.js",
     "dev": "node --watch app.js",
     "test": "node --test test/*.test.js",
-    "test:integration": "node --test test/*.cjs",
+    "test:integration": "node --test --test-concurrency=2 test/*.cjs",
     "check": "node scripts/check.cjs",
     "test:browser": "node test/browser.js",
-    "check:secrets": "node scripts/check-secrets.cjs"
+    "check:secrets": "node scripts/check-secrets.cjs",
+    "test:ui": "node test/ui-browser.js",
+    "format:ui": "prettier --write \"public/*.{html,css,js}\" test/browser.js test/ui-browser.js"
   },
   "engines": {
     "node": ">=24"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1151.0",
+    "@aws-sdk/lib-storage": "^3.1151.0",
     "express": "^5.1.0",
+    "libsodium-wrappers": "^0.8.4",
     "mongodb": "^6.20.0",
     "multer": "^2.4.0",
     "nodemailer": "^10.1.1",
-    "@aws-sdk/client-s3": "^3.1151.0",
-    "@aws-sdk/lib-storage": "^3.1151.0"
+    "stripe": "^23.0.0"
   },
   "devDependencies": {
-    "playwright": "^1.64.1"
+    "@axe-core/playwright": "^4.14.0",
+    "playwright": "^1.64.1",
+    "prettier": "^3.9.10"
   }
 }

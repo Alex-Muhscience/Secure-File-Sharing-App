@@ -1,6 +1,6 @@
 # Secure Transfer interface
 
-Release target: v0.5.0. The user requested a navy blue, scarlet red and white interface that works for clients with varied technical experience. This design updates the presentation and interactions of the existing application. Production infrastructure and commercial acceptance remain separate release gates.
+Release target: v0.5.0. The user requested a navy blue, scarlet red and white interface that works for clients with varied technical experience. This design covers client workflows and the enterprise administration extension of the existing application. Production infrastructure and commercial acceptance remain separate release gates.
 
 ## Design system
 
@@ -16,7 +16,10 @@ Color, spacing, type, radius and motion tokens live in `public/tokens.css`. Defa
 
 - Sign-in: email, verification code, change-email action, delivery feedback and local inbox link only when local mail capture is configured. Support paste and one-time-code autocomplete.
 - Transfers: current workspace, clear send action, real usage/counts, All/Sent/Received filters, search and status filter. File rows show name, size, sender/recipient, readable status, expiry and permitted actions.
-- Send dialog: file picker with optional drag/drop, selected-file preview, recipient email, expiry, actual upload progress/cancel, then a copyable recipient link and scan explanation.
+- Send dialog: one screen at a time, File → Recipient → Access → Review → Result. Include optional drag/drop, lossless compression choice, actual chunk progress, pause/resume and a recipient link with scan explanation. Back preserves input.
+- Analytics: separate owner/admin screen with real 7/30/90-day UTC totals, accessible upload/download chart and expandable paginated daily data.
+- Billing: separate owner/admin screen with actual subscription/limits, payment history and configured/off provider states. Owners choose plan/renewal then review terms and consent on separate compact screens. Stripe may recur or be prepaid; M-Pesa/crypto are prepaid. Prices/currency/credentials remain unconfigured.
+- Platform: explicit server allowlist only, hidden from ordinary workspace owners. Search/paginate clients, review aggregate usage, edit guarded manual subscriptions or separately pause/reactivate access with a reason. Do not expose file plaintext or imply that access suspension cancels charges.
 - Workspace settings: current members, explained roles, add/update/remove access, activity export and a clearly labeled billing simulator when enabled. Team creation is a dedicated dialog.
 - Help: a short explanation of sending, checking and receiving files, plus the server-managed encryption boundary.
 - Revocation/member removal: explicit confirmation explains the immediate access loss. These actions cannot offer a reliable Undo with the existing API.
@@ -29,7 +32,7 @@ Use plain language: “Checking file”, “Ready to download”, “Expired”,
 
 ## Implementation boundaries
 
-Retain the Express/MongoDB API, authorization rules, in-memory browser sessions, scanning worker and storage adapters. Add only a public safe UI-configuration projection for actual upload limits, billing-sandbox availability and local inbox availability. Preserve the CSP; serve assets locally. No new production UI framework is required.
+Retain the Express/MongoDB API, authorization rules, in-memory app sessions, scanning worker and storage adapters. Native download capabilities use a separate file-scoped HttpOnly cookie until file expiry, with explicit logout revocation, to support long resumable downloads. Expose only safe client configuration and tenant-scoped dashboard projections; platform routes require verified allowlisted identities. Add focused dashboard/payment/resumable modules and keep payment credentials server-side. Preserve the CSP; serve assets locally. No new production UI framework is required.
 
 Modify the existing HTML/CSS/JavaScript in place; add reusable tokens, icons and font assets. Preserve all existing transfer and workspace capabilities. Leave the user's uncommitted skill-installation files untouched. Work on a feature branch and publish a PR; ask before merging to main. Commit messages have no assistant attribution.
 

@@ -2,11 +2,17 @@ const crypto = require('node:crypto');
 const PLANS = Object.freeze({
   pilot: { storageBytes: 100 * 1024 * 1024, files: 100, seats: 5 },
   team: { storageBytes: 1024 * 1024 * 1024, files: 1000, seats: 25 },
+  enterprise: { storageBytes: 10 * 1024 ** 4, files: 10000, seats: 500 },
 });
 const personalId = email => `personal_${crypto.createHash('sha256').update(email).digest('hex')}`;
 const recipientKey = email => crypto.createHash('sha256').update(email).digest('hex');
+function isActive(org) {
+  if (!org || org.status !== 'active' || org.adminSuspended) return false;
+  const subscription = org.subscription;
+  return !subscription?.provider || subscription.provider === 'manual' || ['active', 'trialing'].includes(subscription.status) && Number.isFinite(+subscription.periodEnd) && +subscription.periodEnd > Date.now();
+}
 function canAccess(org, file, actor, selectedOrgId, mode = 'view') {
-  if (!org || mode === 'read' && org.status !== 'active') return false;
+  if (!org || mode === 'read' && !isActive(org)) return false;
   const role = org._id === selectedOrgId ? org.members.find(member => member.email === actor)?.role : null;
   if (role && (['owner', 'admin'].includes(role) || file.owner === actor && (mode !== 'manage' || role === 'member'))) return true;
   if (mode === 'manage' || file.recipient !== actor || file.recipientRevoked) return false;
@@ -24,15 +30,16 @@ class Pilot {
     return this.orgs.findOne({ _id: id });
   }
   async context(req) {
-    const id = req.get('X-Organization-ID');
+    const id = req.contextOrganization || req.get('X-Organization-ID');
     const org = id ? await this.orgs.findOne({ _id: id, 'members.email': req.identity }) : await this.personal(req.identity);
     if (!org) return null;
     const member = org.members.find(member => member.email === req.identity);
-    return { ...org, actorEmail: req.identity, role: member.role, limits: PLANS[org.plan] || PLANS.pilot };
+    return { ...org, status: isActive(org) ? 'active' : 'suspended', actorEmail: req.identity, role: member.role, limits: PLANS[org.plan] || PLANS.pilot };
   }
   async reserve(org, bytes) {
     const id = crypto.randomUUID();
-    const result = await this.orgs.updateOne({ _id: org._id, status: 'active', plan: org.plan,
+    const result = await this.orgs.updateOne({ _id: org._id, status: 'active', plan: org.plan, adminSuspended: { $ne: true },
+      ...(org.subscription?.provider && org.subscription.provider !== 'manual' ? { 'subscription.periodEnd': { $gt: new Date() }, 'subscription.status': { $in: ['active', 'trialing'] } } : {}),
       ...(org.actorEmail ? { members: { $elemMatch: { email: org.actorEmail, role: { $in: ['owner', 'admin', 'member'] } } } } : {}),
       usedBytes: { $lte: org.limits.storageBytes - bytes }, fileCount: { $lt: org.limits.files },
     }, { $inc: { usedBytes: bytes, fileCount: 1 }, $push: { reservations: { id, bytes, createdAt: new Date() } } });
@@ -99,7 +106,7 @@ class Pilot {
   async reconcile() {
     for await (const org of this.orgs.find({ 'reservations.0': { $exists: true } })) {
       for (const reservation of org.reservations) {
-        if (+reservation.createdAt < Date.now() - 3600000 && !await this.db.collection('transfers').findOne({ orgId: org._id, reservationId: reservation.id, status: { $ne: 'deleted' } })) await this.release(org._id, reservation.id);
+        if (+reservation.createdAt < Date.now() - 3600000 && !await this.db.collection('transfers').findOne({ orgId: org._id, reservationId: reservation.id, status: { $ne: 'deleted' } }) && !await this.db.collection('uploads').findOne({ orgId: org._id, reservationId: reservation.id, status: { $in: ['uploading', 'finalizing', 'cancelling'] } })) await this.release(org._id, reservation.id);
       }
     }
     for await (const account of this.orgs.find({ 'teamReservations.0': { $exists: true } })) {
@@ -109,4 +116,4 @@ class Pilot {
     }
   }
 }
-module.exports = { Pilot, PLANS, personalId, recipientKey, canAccess };
+module.exports = { Pilot, PLANS, personalId, recipientKey, canAccess, isActive };

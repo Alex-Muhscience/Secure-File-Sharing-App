@@ -17,18 +17,24 @@ async function main() {
   await storage.checkReferences(db);
   const server = config.workerOnly ? null : app.listen(config.port, config.host, () => console.log(`Secure Transfer listening on port ${config.port}`));
   if (server) server.requestTimeout = 120000;
-  let timer, closing = false, activeTick = Promise.resolve(), lastCleanup = 0;
+  let timer, maintenanceTimer, cleanupTimer, closing = false, activeTick = Promise.resolve(), activeMaintenance = Promise.resolve(), activeCleanup = Promise.resolve();
   const tick = () => {
-    activeTick = worker.tick().then(async () => {
-      if (Date.now() - lastCleanup >= 60000) { lastCleanup = Date.now(); await cleanup(); }
-    }).catch(error => console.error('Worker failed:', error.name));
+    activeTick = worker.tick().catch(error => console.error('Worker failed:', error.name));
     activeTick.finally(() => { if (!closing) timer = setTimeout(tick, 2000); });
   };
-  if (config.workerOnly) { console.log('Transfer worker started'); tick(); }
+  const maintain = () => {
+    activeMaintenance = worker.maintain().catch(error => console.error('Maintenance failed:', error.name));
+    activeMaintenance.finally(() => { if (!closing) maintenanceTimer = setTimeout(maintain, 2000); });
+  };
+  const clean = () => {
+    activeCleanup = cleanup().catch(error => console.error('Cleanup failed:', error.name));
+    activeCleanup.finally(() => { if (!closing) cleanupTimer = setTimeout(clean, 60000); });
+  };
+  if (config.workerOnly) { console.log('Transfer worker started'); tick(); maintain(); clean(); }
   const shutdown = () => {
-    if (closing) return; closing = true; clearTimeout(timer);
+    if (closing) return; closing = true; clearTimeout(timer); clearTimeout(maintenanceTimer); clearTimeout(cleanupTimer);
     const timeout = setTimeout(() => process.exit(1), 15000); timeout.unref();
-    const finish = async () => { await activeTick; mail.close(); storage.close(); await client.close(); clearTimeout(timeout); };
+    const finish = async () => { await Promise.all([activeTick, activeMaintenance, activeCleanup]); mail.close(); storage.close(); await client.close(); clearTimeout(timeout); };
     if (server) server.close(() => finish().catch(() => process.exit(1)));
     else finish().catch(() => process.exit(1));
   };

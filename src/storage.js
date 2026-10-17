@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { FileStore, S3Store } = require('./object-store');
+const { MAX_PART, partAAD, encodePart, decodePart, sha256 } = require('./parts');
 class Storage {
   constructor(config) {
     this.config = config; this.driver = config.storageDriver || 'filesystem';
@@ -9,6 +10,7 @@ class Storage {
     this.stores = { filesystem: new FileStore(config.storage) };
     if (config.s3) this.stores.s3 = new S3Store(config.s3);
   }
+  attach(db) { const { Segments } = require('./segments'); this.segmented = new Segments(this, db); }
   store(backend = this.driver) {
     if (!Object.hasOwn(this.stores, backend)) throw new Error('Object backend is not configured');
     return this.stores[backend];
@@ -19,8 +21,9 @@ class Storage {
   async checkReferences(db) {
     const transfers = db.collection('transfers'), filter = { status: { $ne: 'deleted' } };
     const [primary, retained] = await Promise.all([transfers.distinct('storageBackend', filter), transfers.distinct('retainedBackends', filter)]);
+    const chunkPrimary = await db.collection('chunks').distinct('storageBackend'), chunkRetained = await db.collection('chunks').distinct('retainedBackends');
     const legacy = await transfers.findOne({ ...filter, storageBackend: { $exists: false } }, { projection: { _id: 1 } });
-    this.requiredBackends = new Set([this.driver, ...primary, ...retained, ...(legacy ? ['filesystem'] : [])]);
+    this.requiredBackends = new Set([this.driver, ...primary, ...retained, ...chunkPrimary, ...chunkRetained, ...(legacy ? ['filesystem'] : [])]);
     await this.ready();
   }
   wrap(key, id, keyId = this.config.keyId) {
@@ -39,6 +42,15 @@ class Storage {
     return Buffer.concat([decipher.update(Buffer.from(file.wrappedKey, 'hex')), decipher.final()]);
   }
   rewrap(file) { return this.wrap(this.dataKey(file), file.objectId); }
+  async writePart(context, bytes, mode = 'auto') {
+    const encoded = await encodePart(bytes, mode), objectId = crypto.randomUUID(), iv = crypto.randomBytes(12), key = crypto.randomBytes(32);
+    const file = { ...context, format: 'part-v1', objectId, size: bytes.length, storedSize: encoded.bytes.length, codec: encoded.codec, sha256: sha256(bytes), storageBackend: this.driver, iv: iv.toString('hex'), ...this.wrap(key, objectId) };
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv); cipher.setAAD(partAAD(file));
+    const ciphertext = Buffer.concat([cipher.update(encoded.bytes), cipher.final()]); file.tag = cipher.getAuthTag().toString('hex');
+    try { await this.store().write(objectId, Readable.from(ciphertext), new AbortController()); }
+    catch (error) { await this.remove(objectId).catch(() => {}); throw error; }
+    return file;
+  }
   _handleFile(req, file, cb) {
     const id = crypto.randomUUID(), iv = crypto.randomBytes(12), key = crypto.randomBytes(32), controller = new AbortController();
     const wrapped = this.wrap(key, id), cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -60,17 +72,31 @@ class Storage {
   _removeFile(req, file, cb) { this.remove(file.objectId, file.storageBackend).then(() => cb(null), cb); }
   async remove(id, backend = this.driver) { await this.store(backend).remove(id); }
   async removeRecord(file) {
+    if (file.format === 'segments-v1') return this.segmented.remove(file);
     for (const backend of new Set([file.storageBackend || 'filesystem', ...(file.retainedBackends || [])])) await this.remove(file.objectId, backend);
   }
-  async readCiphertext(file) { return this.store(file.storageBackend || 'filesystem').read(file.objectId, this.config.maxSize); }
+  async readCiphertext(file) { return this.store(file.storageBackend || 'filesystem').read(file.objectId, file.format === 'part-v1' ? MAX_PART : 25 * 1024 * 1024); }
   authenticate(file, ciphertext) {
     const decipher = crypto.createDecipheriv('aes-256-gcm', this.dataKey(file), Buffer.from(file.iv, 'hex'), { authTagLength: 16 });
-    decipher.setAAD(Buffer.from(file.objectId)); decipher.setAuthTag(Buffer.from(file.tag, 'hex'));
+    decipher.setAAD(file.format === 'part-v1' ? partAAD(file) : Buffer.from(file.objectId)); decipher.setAuthTag(Buffer.from(file.tag, 'hex'));
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   }
-  async decrypt(file) { return this.authenticate(file, await this.readCiphertext(file)); }
+  async decrypt(file) {
+    if (file.format === 'segments-v1') {
+      if (file.size > 25 * 1024 * 1024) throw new Error('Use streaming reads for large files');
+      const chunks = []; for await (const chunk of this.plaintext(file)) chunks.push(chunk);
+      return Buffer.concat(chunks);
+    }
+    const plain = this.authenticate(file, await this.readCiphertext(file));
+    return file.format === 'part-v1' ? decodePart(plain, file) : plain;
+  }
+  async *plaintext(file, range, verified = false) {
+    if (file.format === 'segments-v1') yield* this.segmented.read(file, range, verified);
+    else { const bytes = await this.decrypt(file); yield range ? bytes.subarray(range.start, range.end + 1) : bytes; }
+  }
+  async verify(file) { for await (const bytes of this.plaintext(file)) { /* Each part is authenticated before it is yielded. */ } }
   async importCiphertext(id, bytes, backend = this.driver) {
-    if (bytes.length > this.config.maxSize) throw new Error('Object exceeds size limit');
+    if (bytes.length > MAX_PART) throw new Error('Object exceeds size limit');
     const controller = new AbortController(); await this.store(backend).write(id, Readable.from(bytes), controller);
   }
   async *list(primaryOnly = false) {
