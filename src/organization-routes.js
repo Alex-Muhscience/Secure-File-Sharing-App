@@ -1,7 +1,7 @@
-const { PLANS, recipientKey } = require('./pilot');
+const { PLANS, recipientKey, isActive } = require('./pilot');
 function organizationRoutes({ app, db, pilot, audit, email }) {
   const safe = org => ({ _id: org._id, name: org.name, owner: org.owner, members: org.members,
-    plan: org.plan, status: org.status, usedBytes: org.usedBytes, fileCount: org.fileCount,
+    plan: org.plan, status: isActive(org) ? 'active' : 'suspended', usedBytes: org.usedBytes, fileCount: org.fileCount,
     limits: PLANS[org.plan] || PLANS.pilot });
   app.get('/api/organizations', async (req, res) => {
     await pilot.personal(req.identity);

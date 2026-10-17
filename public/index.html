@@ -1,22 +1,1360 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Secure Transfer</title><link rel="stylesheet" href="/styles.css"><script src="/script.js" defer></script></head>
-<body><main>
-<header><span class="badge">SECURE TRANSFER · LOCAL DEVELOPMENT</span><h1>Share a file.<br>Control who gets it.</h1><p>Verify your email, choose a recipient, and set an expiry.</p></header>
-<p id="status" role="status" aria-live="polite">Connecting to the application…</p>
-<section id="signin"><h2>Sign in with email</h2><form id="request-form"><label for="email">Your email</label><input id="email" type="email" autocomplete="email" required><button>Send verification code</button></form>
-<form id="verify-form" hidden><label for="code">Six-digit code</label><input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required><button>Verify and sign in</button></form><p class="hint">For this local stack, open <a href="http://localhost:8025" target="_blank" rel="noreferrer">the email inbox</a> to find your code.</p></section>
-<section id="workspace" hidden><div class="row"><h2 id="identity"></h2><button id="logout" class="secondary">Sign out</button></div>
-<label for="organization">Workspace</label><select id="organization"></select><p id="usage-summary"></p>
-<form id="create-org-form"><label for="org-name">New team workspace</label><input id="org-name" maxlength="80" required><button>Create workspace</button></form>
-<details id="team-controls"><summary>Team and workspace settings</summary><div id="members"></div>
-<form id="member-form"><label for="member-email">Member email</label><input id="member-email" type="email" required><label for="member-role">Role</label><select id="member-role"><option value="member">Member</option><option value="viewer">Viewer</option><option value="admin">Administrator</option></select><button>Add or update member</button></form>
-<button id="audit-export" class="secondary">Export activity</button>
-<form id="sandbox-form"><p>Local billing sandbox — no payments are collected.</p><label for="sandbox-plan">Simulate plan</label><select id="sandbox-plan"><option value="pilot">Pilot: 100 MB, 5 seats</option><option value="team">Team: 1 GB, 25 seats</option></select><button>Apply sandbox plan</button></form></details>
-<p id="shared-message" hidden></p>
-<form id="upload-form"><label for="file">File (up to 10 MB)</label><input id="file" type="file" required><label for="recipient">Recipient email</label><input id="recipient" type="email" required><label for="expiry">Expires after</label><select id="expiry"><option value="1">1 hour</option><option value="24" selected>24 hours</option><option value="72">3 days</option><option value="168">7 days</option></select><button>Encrypt and share</button></form>
-<div id="share-result" hidden><label for="share-link">Recipient link</label><input id="share-link" readonly><button id="copy" class="secondary">Copy link</button><p>The recipient must sign in with the email you specified.</p></div>
-<progress id="upload-progress" hidden aria-label="Uploading file"></progress><button id="cancel-upload" type="button" class="secondary" hidden>Cancel upload</button>
-<div class="row"><h2>Your transfers</h2><button id="refresh" class="secondary">Refresh</button></div><div id="files"></div></section>
-<footer>Files use server-managed encryption. This server can decrypt them. Downloads become available after malware scanning. This is a local pilot build; only download files from people you trust.</footer>
-</main></body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#111f3c" />
+    <meta
+      name="description"
+      content="Share a file with the right person. Set an expiry, track its status, and stay in control of access."
+    />
+    <title>Secure Transfer · File sharing, with control</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href="/fonts/instrument-sans-regular.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link rel="stylesheet" href="/tokens.css" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/dashboards.js" defer></script>
+    <script src="/billing-ui.js" defer></script>
+    <script src="/resumable.js" defer></script>
+    <script src="/script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <main id="main-content" tabindex="-1">
+      <section id="signin" class="auth-layout" aria-label="Sign in">
+        <div class="auth-story">
+          <a
+            class="brand brand-light"
+            href="/"
+            aria-label="securetransfer. home"
+            ><span class="brand-mark"
+              ><svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#brand"></use></svg></span
+            ><span
+              >secure<span class="brand-weight">transfer</span
+              ><span class="brand-period">.</span></span
+            ></a
+          >
+          <div class="auth-story-content">
+            <span class="auth-kicker">A better way to hand over files</span>
+            <p class="auth-headline">
+              The right file.<br />The right hands<span class="brand-period"
+                >.</span
+              >
+            </p>
+            <p class="auth-description">
+              Send your work with confidence. Choose who can download it, decide
+              when access ends, and keep every handoff in view.
+            </p>
+            <div class="handoff-art" aria-hidden="true">
+              <div class="handoff-track">
+                <span class="handoff-node"
+                  ><svg class="icon">
+                    <use href="/icons.svg#file"></use></svg></span
+                ><span class="handoff-line"></span
+                ><span class="handoff-lock"
+                  ><svg class="icon">
+                    <use href="/icons.svg#lock"></use></svg></span
+                ><span class="handoff-line"></span
+                ><span class="handoff-node"
+                  ><svg class="icon"><use href="/icons.svg#check"></use></svg
+                ></span>
+              </div>
+              <div class="handoff-labels">
+                <span>Your file</span><span>Protected</span
+                ><span>Their inbox</span>
+              </div>
+            </div>
+          </div>
+          <p class="auth-story-foot">
+            <svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#shield"></use>
+            </svg>
+            Encrypted storage. Verified recipients. You’re in control.
+          </p>
+        </div>
+        <div class="auth-main">
+          <div class="auth-topline">
+            <span>Files worth sharing. Access worth protecting.</span
+            ><button type="button" class="text-button help-trigger">
+              How it works
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#arrow"></use>
+              </svg>
+            </button>
+          </div>
+          <div class="auth-form-wrap">
+            <div class="auth-symbol">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#arrow-up"></use>
+              </svg>
+            </div>
+            <h1 id="signin-title">Your next handoff<br />starts here.</h1>
+            <p id="signin-description" class="lead">
+              Sign in or get started with your email. No password to remember.
+            </p>
+            <form id="request-form">
+              <div class="field">
+                <label for="email">Email address</label
+                ><input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autocomplete="email"
+                  placeholder="you@company.com"
+                  maxlength="254"
+                  required
+                  aria-describedby="email-hint"
+                />
+                <p id="email-hint" class="field-hint">
+                  We’ll send you a six-digit sign-in code.
+                </p>
+              </div>
+              <p
+                id="request-error"
+                class="form-error"
+                role="alert"
+                tabindex="-1"
+                hidden
+              ></p>
+              <button class="button button-primary button-wide" type="submit">
+                <span>Send sign-in code</span
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#arrow"></use>
+                </svg>
+              </button>
+            </form>
+            <form id="verify-form" hidden>
+              <p id="code-destination" class="code-destination"></p>
+              <div class="field">
+                <label for="code">Verification code</label
+                ><input
+                  id="code"
+                  class="code-input"
+                  name="code"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  maxlength="6"
+                  required
+                  aria-describedby="code-hint"
+                />
+                <p id="code-hint" class="field-hint">
+                  Paste the six-digit code from your email. It expires in 10
+                  minutes.
+                </p>
+              </div>
+              <p
+                id="verify-error"
+                class="form-error"
+                role="alert"
+                tabindex="-1"
+                hidden
+              ></p>
+              <button class="button button-primary button-wide" type="submit">
+                <span>Verify and sign in</span
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#arrow"></use>
+                </svg>
+              </button>
+              <div class="verification-actions">
+                <button type="button" id="change-email" class="text-button">
+                  Use a different email</button
+                ><button type="button" id="resend-code" class="text-button">
+                  Resend code
+                </button>
+              </div>
+            </form>
+            <p id="local-inbox" class="local-note" hidden>
+              Testing locally? Your code is in the
+              <a id="inbox-link" target="_blank" rel="noreferrer"
+                >preview inbox
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#external"></use></svg></a
+              >.
+            </p>
+            <div class="auth-assurance">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#lock"></use>
+              </svg>
+              <p>
+                Your email verifies your identity. A shared link works only for
+                its authorized recipient.
+              </p>
+            </div>
+          </div>
+          <footer class="auth-footer">
+            <span>Secure Transfer</span
+            ><span>Thoughtful sharing. Clear control.</span>
+          </footer>
+        </div>
+      </section>
+
+      <section
+        id="workspace"
+        class="app-layout"
+        aria-label="Your workspace"
+        hidden
+      >
+        <aside class="sidebar" aria-label="Workspace navigation">
+          <a
+            class="brand brand-light"
+            href="/"
+            aria-label="securetransfer. home"
+            ><span class="brand-mark"
+              ><svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#brand"></use></svg></span
+            ><span
+              >secure<span class="brand-weight">transfer</span
+              ><span class="brand-period">.</span></span
+            ></a
+          >
+          <div class="workspace-picker">
+            <label for="organization">Workspace</label>
+            <div class="workspace-select">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#folder"></use></svg
+              ><select id="organization" aria-label="Select workspace"></select>
+            </div>
+            <button
+              id="create-workspace"
+              type="button"
+              class="sidebar-create"
+              aria-label="Create workspace"
+            >
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#plus"></use></svg
+              ><span>Create workspace</span>
+            </button>
+          </div>
+          <nav class="primary-nav" aria-label="Main navigation">
+            <button
+              id="nav-transfers"
+              class="nav-button is-active"
+              type="button"
+              aria-current="page"
+            >
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#files"></use></svg
+              ><span>Transfers</span
+              ><span id="nav-count" class="nav-count">0</span></button
+            ><button id="nav-analytics" class="nav-button" type="button" hidden>
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#chart"></use></svg
+              ><span>Analytics</span>
+            </button>
+            <button id="nav-billing" class="nav-button" type="button" hidden>
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#card"></use></svg
+              ><span>Billing</span>
+            </button>
+            <button id="nav-platform" class="nav-button" type="button" hidden>
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#shield"></use></svg
+              ><span>Platform</span>
+            </button>
+            <button id="nav-settings" class="nav-button" type="button">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#users"></use></svg
+              ><span>Workspace</span></button
+            ><button class="nav-button help-trigger" type="button">
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#help"></use></svg
+              ><span>How it works</span>
+            </button>
+          </nav>
+          <div class="sidebar-bottom">
+            <div class="storage-summary">
+              <div class="storage-heading">
+                <span>Workspace storage</span
+                ><span id="storage-percent">0%</span>
+              </div>
+              <progress
+                id="storage-progress"
+                max="100"
+                value="0"
+                aria-label="Workspace storage used"
+              ></progress>
+              <p id="usage-summary">Loading usage…</p>
+              <p id="quota-files" class="sidebar-muted"></p>
+            </div>
+            <div class="account">
+              <button
+                id="account-menu"
+                class="account-trigger"
+                type="button"
+                popovertarget="profile-menu"
+                aria-labelledby="identity account-role"
+              >
+                <span id="avatar" class="avatar" aria-hidden="true">ST</span
+                ><span class="account-text"
+                  ><span id="identity"></span>
+                  <span id="account-role" class="sidebar-muted"></span></span
+                ><svg class="icon account-chevron" aria-hidden="true">
+                  <use href="/icons.svg#chevron"></use>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </aside>
+        <div class="app-main">
+          <header class="topbar">
+            <div class="breadcrumb">
+              <span id="workspace-name">Your workspace</span
+              ><span class="breadcrumb-divider">/</span
+              ><span id="page-location">Transfers</span>
+            </div>
+            <div class="topbar-meta">
+              <span class="encrypted-label"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#lock"></use>
+                </svg>
+                Encrypted storage</span
+              ><span id="plan-label" class="plan-label">Pilot plan</span>
+            </div>
+          </header>
+          <div class="page-content">
+            <section id="transfers-view" aria-labelledby="transfers-title">
+              <div class="page-heading">
+                <div>
+                  <h1 id="transfers-title" tabindex="-1">Your transfers</h1>
+                  <p class="lead">
+                    Share files. Manage access. Keep things moving.
+                  </p>
+                </div>
+                <button
+                  id="new-transfer"
+                  class="button button-primary"
+                  type="button"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#plus"></use>
+                  </svg>
+                  Send a file
+                </button>
+              </div>
+              <p id="workspace-notice" class="notice" hidden></p>
+              <details
+                id="pending-uploads"
+                class="settings-section pending-uploads"
+                hidden
+              >
+                <summary id="pending-upload-label">Unfinished uploads</summary>
+                <ul id="pending-upload-list" class="client-list"></ul>
+              </details>
+              <div id="shared-message" class="shared-banner" hidden>
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#link"></use></svg
+                ><span id="shared-message-text"></span
+                ><button id="show-shared" class="text-button" type="button">
+                  Find file
+                </button>
+              </div>
+              <div class="overview" aria-label="Loaded transfer summary">
+                <div class="overview-item">
+                  <span class="metric-icon"
+                    ><svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#check-circle"></use></svg
+                  ></span>
+                  <div>
+                    <span class="metric-label">Ready to download</span
+                    ><strong id="ready-count">—</strong>
+                  </div>
+                </div>
+                <div class="overview-item">
+                  <span class="metric-icon"
+                    ><svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#clock"></use></svg
+                  ></span>
+                  <div>
+                    <span class="metric-label">Being checked</span
+                    ><strong id="checking-count">—</strong>
+                  </div>
+                </div>
+                <div class="overview-item">
+                  <span class="metric-icon"
+                    ><svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#download"></use></svg
+                  ></span>
+                  <div>
+                    <span class="metric-label">Download attempts</span
+                    ><strong id="download-count">—</strong>
+                  </div>
+                </div>
+                <p class="overview-note">Across your loaded transfers</p>
+              </div>
+              <div class="transfer-panel">
+                <div class="panel-title-row">
+                  <div>
+                    <h2>
+                      Transfer activity
+                      <span id="transfer-total" class="count-pill">0</span>
+                    </h2>
+                    <p>Everything you’ve sent and received, in one place.</p>
+                  </div>
+                  <button
+                    id="refresh"
+                    class="button button-secondary"
+                    type="button"
+                  >
+                    <svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#refresh"></use>
+                    </svg>
+                    Refresh
+                  </button>
+                </div>
+                <div class="list-controls">
+                  <div
+                    class="filter-tabs"
+                    role="group"
+                    aria-label="Transfer direction"
+                  >
+                    <button type="button" data-filter="all" aria-pressed="true">
+                      All files</button
+                    ><button
+                      type="button"
+                      data-filter="sent"
+                      aria-pressed="false"
+                    >
+                      Sent</button
+                    ><button
+                      type="button"
+                      data-filter="received"
+                      aria-pressed="false"
+                    >
+                      Received
+                    </button>
+                  </div>
+                  <div class="search-control">
+                    <label for="search" class="sr-only">Search transfers</label
+                    ><svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#search"></use></svg
+                    ><input
+                      id="search"
+                      type="search"
+                      placeholder="Search files or email…"
+                      autocomplete="off"
+                    />
+                  </div>
+                  <label for="status-filter" class="sr-only"
+                    >Filter by status</label
+                  ><select id="status-filter">
+                    <option value="all">All statuses</option>
+                    <option value="ready">Ready to download</option>
+                    <option value="checking">Checking file</option>
+                    <option value="expired">Expired</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="removed">Removed</option>
+                  </select>
+                </div>
+                <div
+                  id="refresh-error"
+                  class="refresh-error"
+                  role="alert"
+                  hidden
+                >
+                  <span id="refresh-error-text"></span
+                  ><button id="retry-refresh" class="text-button" type="button">
+                    Try again
+                  </button>
+                </div>
+                <div class="list-head" aria-hidden="true">
+                  <span>File name</span><span>Shared with / from</span
+                  ><span>Status</span><span>Access ends</span
+                  ><span>Actions</span>
+                </div>
+                <div id="files-loading" class="list-loading" role="status">
+                  <div class="skeleton-row"></div>
+                  <div class="skeleton-row"></div>
+                  <div class="skeleton-row"></div>
+                  <span class="sr-only">Loading transfers…</span>
+                </div>
+                <ul id="files" class="file-list" aria-label="Transfers"></ul>
+                <div id="empty-state" class="empty-state" hidden>
+                  <div class="empty-icon">
+                    <svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#files"></use>
+                    </svg>
+                  </div>
+                  <h3 id="empty-title">Your next handoff starts here.</h3>
+                  <p id="empty-description">
+                    Send a file to someone, and you’ll see its status here.
+                  </p>
+                  <button
+                    id="empty-action"
+                    class="button button-primary"
+                    type="button"
+                  >
+                    Send your first file
+                    <svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#arrow"></use>
+                    </svg>
+                  </button>
+                </div>
+                <div class="list-footer">
+                  <span
+                    id="results-count"
+                    role="status"
+                    aria-live="polite"
+                  ></span
+                  ><span id="sync-label"
+                    ><span class="sync-dot" aria-hidden="true"></span> Updates
+                    automatically</span
+                  >
+                </div>
+              </div>
+              <div class="workspace-footnote">
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#shield"></use>
+                </svg>
+                <p>
+                  Files are encrypted in storage and checked before downloads
+                  are enabled.
+                  <button class="text-button help-trigger" type="button">
+                    Understand file protection
+                  </button>
+                </p>
+              </div>
+            </section>
+            <section
+              id="analytics-view"
+              aria-labelledby="analytics-title"
+              hidden
+            >
+              <div class="page-heading">
+                <div>
+                  <h1 id="analytics-title" tabindex="-1">
+                    Workspace analytics
+                  </h1>
+                  <p class="lead">
+                    Understand your storage and transfer activity.
+                  </p>
+                </div>
+                <div class="field">
+                  <label for="analytics-days">Reporting period</label
+                  ><select id="analytics-days">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                  </select>
+                </div>
+              </div>
+              <div id="analytics-content" aria-live="polite"></div>
+            </section>
+            <section id="billing-view" aria-labelledby="billing-title" hidden>
+              <div class="page-heading">
+                <div>
+                  <h1 id="billing-title" tabindex="-1">Plan &amp; billing</h1>
+                  <p class="lead">
+                    Your subscription, payment options and invoices.
+                  </p>
+                </div>
+              </div>
+              <div id="billing-content" aria-live="polite"></div>
+            </section>
+            <section id="platform-view" aria-labelledby="platform-title" hidden>
+              <div class="page-heading">
+                <div>
+                  <h1 id="platform-title" tabindex="-1">Platform overview</h1>
+                  <p class="lead">
+                    Manage client workspaces and review platform activity.
+                  </p>
+                </div>
+                <div id="platform-period" class="field" hidden>
+                  <label for="platform-days">Reporting period</label
+                  ><select id="platform-days">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                  </select>
+                </div>
+              </div>
+              <div
+                class="filter-tabs platform-tabs"
+                role="group"
+                aria-label="Platform view"
+              >
+                <button
+                  id="platform-show-clients"
+                  type="button"
+                  aria-pressed="true"
+                >
+                  Clients
+                </button>
+                <button
+                  id="platform-show-analytics"
+                  type="button"
+                  aria-pressed="false"
+                >
+                  Analytics
+                </button>
+              </div>
+              <div id="platform-content" aria-live="polite" hidden></div>
+              <section id="platform-client-panel" class="settings-section">
+                <h2>Client workspaces</h2>
+                <form id="client-search-form" class="client-search">
+                  <label for="client-search" class="sr-only"
+                    >Search clients by workspace or owner</label
+                  ><input
+                    id="client-search"
+                    type="search"
+                    maxlength="100"
+                    placeholder="Workspace or owner email"
+                  /><button class="button button-secondary" type="submit">
+                    Search
+                  </button>
+                </form>
+                <div id="platform-clients" aria-live="polite"></div>
+                <div class="client-pagination">
+                  <button
+                    id="clients-first"
+                    class="text-button"
+                    type="button"
+                    hidden
+                  >
+                    First page</button
+                  ><button
+                    id="clients-next"
+                    class="button button-secondary"
+                    type="button"
+                    hidden
+                  >
+                    Next page
+                  </button>
+                </div>
+              </section>
+            </section>
+            <section
+              id="team-controls"
+              class="settings-view"
+              aria-labelledby="settings-title"
+              hidden
+            >
+              <div class="page-heading">
+                <div>
+                  <h1 id="settings-title" tabindex="-1">
+                    Your workspace, together.
+                  </h1>
+                  <p class="lead">
+                    Manage the people and permissions behind every handoff.
+                  </p>
+                </div>
+                <button
+                  id="audit-export"
+                  class="button button-secondary"
+                  type="button"
+                >
+                  <svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#download"></use>
+                  </svg>
+                  Export activity
+                </button>
+              </div>
+              <div class="settings-grid">
+                <section class="settings-section">
+                  <div class="section-heading">
+                    <h2>People with access</h2>
+                    <span id="seat-summary" class="subtle-label"></span>
+                  </div>
+                  <p class="section-description">
+                    Owners and administrators manage workspace files. Members
+                    manage their own files. Viewers can download files shared
+                    with them.
+                  </p>
+                  <ul
+                    id="members"
+                    class="member-list"
+                    aria-label="Workspace members"
+                  ></ul>
+                  <form id="member-form" class="member-form">
+                    <h3>Add or update a member</h3>
+                    <div class="field">
+                      <label for="member-email">Email address</label
+                      ><input
+                        id="member-email"
+                        type="email"
+                        autocomplete="off"
+                        placeholder="colleague@company.com"
+                        required
+                      />
+                    </div>
+                    <div class="field">
+                      <label for="member-role">Access level</label
+                      ><select
+                        id="member-role"
+                        aria-describedby="role-description"
+                      >
+                        <option value="member">Member</option>
+                        <option value="viewer">Viewer</option>
+                        <option value="admin">Administrator</option>
+                      </select>
+                      <p id="role-description" class="field-hint">
+                        Can send files and manage their own transfers.
+                      </p>
+                    </div>
+                    <p
+                      id="member-error"
+                      class="form-error"
+                      role="alert"
+                      tabindex="-1"
+                      hidden
+                    ></p>
+                    <button class="button button-navy" type="submit">
+                      <svg class="icon" aria-hidden="true">
+                        <use href="/icons.svg#plus"></use>
+                      </svg>
+                      Save member
+                    </button>
+                  </form>
+                </section>
+                <div class="settings-aside">
+                  <section class="settings-section">
+                    <h2>Workspace usage</h2>
+                    <p id="settings-usage" class="section-description"></p>
+                    <dl class="usage-details">
+                      <div>
+                        <dt>Storage used</dt>
+                        <dd id="settings-storage">—</dd>
+                      </div>
+                      <div>
+                        <dt>Files stored</dt>
+                        <dd id="settings-files">—</dd>
+                      </div>
+                      <div>
+                        <dt>Current plan</dt>
+                        <dd id="settings-plan">—</dd>
+                      </div>
+                    </dl>
+                  </section>
+                  <section id="sandbox-section" class="settings-section" hidden>
+                    <span class="preview-tag">Testing only</span>
+                    <h2>Plan preview</h2>
+                    <p class="section-description">
+                      Try different workspace limits. No payment is collected.
+                    </p>
+                    <form id="sandbox-form">
+                      <div class="field">
+                        <label for="sandbox-plan">Workspace plan</label
+                        ><select id="sandbox-plan">
+                          <option value="pilot">
+                            Pilot · 100 MB · 5 people
+                          </option>
+                          <option value="team">Team · 1 GB · 25 people</option>
+                        </select>
+                      </div>
+                      <p
+                        id="sandbox-error"
+                        class="form-error"
+                        role="alert"
+                        tabindex="-1"
+                        hidden
+                      ></p>
+                      <button
+                        class="button button-secondary button-wide"
+                        type="submit"
+                      >
+                        Apply test plan
+                      </button>
+                    </form>
+                  </section>
+                </div>
+              </div>
+            </section>
+          </div>
+          <footer class="app-footer">
+            <span>Secure Transfer</span
+            ><span>The right file. The right hands.</span>
+          </footer>
+        </div>
+      </section>
+    </main>
+
+    <dialog
+      id="transfer-dialog"
+      class="dialog transfer-dialog"
+      aria-labelledby="transfer-title"
+    >
+      <div class="dialog-top">
+        <span class="dialog-symbol"
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#upload"></use></svg></span
+        ><button
+          class="icon-button dialog-close"
+          type="button"
+          aria-label="Close send dialog"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#close"></use>
+          </svg>
+        </button>
+      </div>
+      <div id="send-content">
+        <ol class="send-steps" aria-label="Send progress">
+          <li aria-current="step">1 <span>File</span></li>
+          <li>2 <span>Recipient</span></li>
+          <li>3 <span>Access</span></li>
+          <li>4 <span>Review</span></li>
+        </ol>
+        <h2 id="transfer-title" tabindex="-1">Choose your file.</h2>
+        <p id="transfer-description" class="dialog-description">
+          Start with the file you want to share.
+        </p>
+        <form id="upload-form" novalidate>
+          <section data-send-step="0" aria-label="File">
+            <p id="resume-instructions" class="notice" hidden></p>
+            <div id="drop-area" class="drop-area">
+              <label class="drop-zone" for="file"
+                ><input
+                  id="file"
+                  type="file"
+                  class="sr-only"
+                  required
+                  aria-describedby="file-limit"
+                /><span class="drop-icon"
+                  ><svg class="icon" aria-hidden="true">
+                    <use href="/icons.svg#upload"></use></svg></span
+                ><strong>Choose a file <span>or drop it here</span></strong
+                ><span id="file-limit">Any file type, up to 10 MB</span></label
+              >
+            </div>
+            <div id="selected-file" class="selected-file" hidden>
+              <span class="file-icon"
+                ><svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#file"></use></svg
+              ></span>
+              <div>
+                <strong id="selected-name"></strong
+                ><span id="selected-size"></span>
+              </div>
+              <button
+                id="remove-file"
+                type="button"
+                class="icon-button"
+                aria-label="Remove selected file"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="/icons.svg#close"></use>
+                </svg>
+              </button>
+            </div>
+          </section>
+          <section data-send-step="1" aria-label="Recipient" hidden>
+            <div class="field">
+              <label for="recipient">Recipient’s email address</label
+              ><input
+                id="recipient"
+                type="email"
+                placeholder="recipient@company.com"
+                autocomplete="off"
+                required
+                aria-describedby="recipient-hint"
+              />
+              <p id="recipient-hint" class="field-hint">
+                This person can download after verifying this email.
+              </p>
+            </div>
+          </section>
+          <section data-send-step="2" aria-label="Access" hidden>
+            <div class="field">
+              <label for="compression">File compression</label
+              ><select id="compression" aria-describedby="compression-hint">
+                <option value="auto">Automatic lossless compression</option>
+                <option value="maximum">
+                  Maximum Brotli compression · slower
+                </option>
+                <option value="none">Keep original size</option>
+              </select>
+              <p id="compression-hint" class="field-hint">
+                We reduce size where useful. Downloads restore the original
+                file. ZIPs and most videos may not get smaller.
+              </p>
+            </div>
+            <div class="field">
+              <label for="expiry">Keep access open for</label
+              ><select id="expiry" aria-describedby="expiry-hint">
+                <option value="1">1 hour</option>
+                <option value="24" selected>24 hours</option>
+                <option value="72">3 days</option>
+                <option value="168">7 days</option>
+              </select>
+              <p id="expiry-hint" class="field-hint">
+                Access ends automatically. You can also remove it sooner.
+              </p>
+            </div>
+            <p class="field-hint">
+              Your file is encrypted in storage. Downloads stay locked until its
+              security check completes.
+            </p>
+          </section>
+          <section data-send-step="3" aria-label="Review" hidden>
+            <dl class="review-details">
+              <div>
+                <dt>File</dt>
+                <dd id="review-file"></dd>
+              </div>
+              <div>
+                <dt>Size</dt>
+                <dd id="review-size"></dd>
+              </div>
+              <div>
+                <dt>Recipient</dt>
+                <dd id="review-recipient"></dd>
+              </div>
+              <div>
+                <dt>Access expires after</dt>
+                <dd id="review-expiry"></dd>
+              </div>
+            </dl>
+          </section>
+          <p
+            id="upload-error"
+            class="form-error"
+            role="alert"
+            tabindex="-1"
+            hidden
+          ></p>
+          <div id="upload-feedback" class="upload-feedback" hidden>
+            <div class="progress-heading">
+              <span id="upload-label" role="status" aria-live="polite"
+                >Uploading securely…</span
+              ><button id="cancel-upload" type="button" class="text-button">
+                Cancel upload
+              </button>
+            </div>
+            <progress
+              id="upload-progress"
+              max="100"
+              value="0"
+              aria-label="File upload progress"
+            ></progress>
+          </div>
+          <div class="send-navigation">
+            <button
+              id="send-back"
+              class="button button-secondary"
+              type="button"
+              hidden
+            >
+              Back
+            </button>
+            <button id="send-next" class="button button-navy" type="button">
+              Continue
+              <svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#arrow"></use>
+              </svg>
+            </button>
+            <button
+              id="send-submit"
+              class="button button-primary"
+              type="submit"
+              hidden
+            >
+              <span>Send securely</span
+              ><svg class="icon" aria-hidden="true">
+                <use href="/icons.svg#arrow"></use>
+              </svg>
+            </button>
+          </div>
+          <button id="discard-upload" type="button" class="text-button" hidden>
+            Discard saved upload
+          </button>
+          <p class="dialog-footnote">
+            <svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#lock"></use>
+            </svg>
+            Encrypted in storage. Checked before download.
+          </p>
+        </form>
+      </div>
+      <section
+        id="share-result"
+        class="share-result"
+        aria-labelledby="share-title"
+        hidden
+      >
+        <span class="success-symbol"
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#check"></use></svg
+        ></span>
+        <h2 id="share-title" tabindex="-1">Your file is on its way.</h2>
+        <p id="share-description">
+          We’re checking the file. Your recipient will be emailed when it’s
+          ready.
+        </p>
+        <div class="share-file">
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#file"></use></svg
+          ><strong id="share-filename"></strong>
+        </div>
+        <label for="share-link">Recipient link</label>
+        <div class="copy-row">
+          <input id="share-link" type="text" readonly /><button
+            id="copy"
+            type="button"
+            class="button button-navy"
+          >
+            <svg class="icon" aria-hidden="true">
+              <use href="/icons.svg#copy"></use></svg
+            ><span>Copy link</span>
+          </button>
+        </div>
+        <p class="field-hint">
+          The link still requires the recipient’s verified email.
+        </p>
+        <button
+          id="finish-share"
+          type="button"
+          class="button button-secondary button-wide"
+        >
+          Back to transfers
+        </button>
+      </section>
+    </dialog>
+
+    <dialog
+      id="checkout-dialog"
+      class="dialog small-dialog"
+      aria-labelledby="checkout-title"
+    >
+      <div class="dialog-top">
+        <span class="dialog-symbol"
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#card"></use></svg></span
+        ><button
+          class="icon-button dialog-close"
+          type="button"
+          aria-label="Close payment review"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#close"></use>
+          </svg>
+        </button>
+      </div>
+      <h2 id="checkout-title" tabindex="-1">Payment options.</h2>
+      <p id="checkout-test" class="notice" hidden>
+        Test checkout. No live payment will be collected.
+      </p>
+      <form id="checkout-form">
+        <div id="checkout-options">
+          <div class="field">
+            <label for="checkout-plan">Plan and price</label
+            ><select id="checkout-plan"></select>
+          </div>
+          <div class="field">
+            <label for="checkout-mode">Renewal</label
+            ><select id="checkout-mode"></select>
+          </div>
+          <div id="checkout-phone-field" class="field" hidden>
+            <label for="checkout-phone">M-Pesa phone number</label
+            ><input
+              id="checkout-phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              pattern="254[17][0-9]{8}"
+              maxlength="12"
+              placeholder="254712345678"
+              aria-describedby="checkout-phone-hint"
+            />
+            <p id="checkout-phone-hint" class="field-hint">
+              Use your Kenyan mobile number, including 254.
+            </p>
+          </div>
+          <button
+            id="checkout-next"
+            class="button button-primary button-wide"
+            type="button"
+          >
+            Review payment
+          </button>
+        </div>
+        <div id="checkout-review" hidden>
+          <p id="checkout-terms" class="payment-terms"></p>
+          <label class="checkbox-field" for="checkout-consent"
+            ><input
+              id="checkout-consent"
+              type="checkbox"
+              required
+              disabled
+            /><span>I agree to these payment and renewal terms.</span></label
+          >
+          <button id="checkout-back" class="text-button" type="button">
+            Back to options
+          </button>
+          <button class="button button-primary button-wide" type="submit">
+            Continue to payment
+          </button>
+        </div>
+        <p
+          id="checkout-error"
+          class="form-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+      </form>
+    </dialog>
+    <dialog
+      id="client-dialog"
+      class="dialog small-dialog"
+      aria-labelledby="client-title"
+    >
+      <div class="dialog-top">
+        <span class="dialog-symbol"
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#users"></use></svg></span
+        ><button
+          class="icon-button dialog-close"
+          type="button"
+          aria-label="Close client details"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#close"></use>
+          </svg>
+        </button>
+      </div>
+      <h2 id="client-title">Client subscription</h2>
+      <p id="client-owner" class="dialog-description"></p>
+      <p id="client-usage" class="field-hint"></p>
+      <form id="client-subscription-form">
+        <div class="field">
+          <label for="client-plan">Plan</label
+          ><select id="client-plan">
+            <option value="enterprise">Enterprise · 10 TB · 500 people</option>
+            <option value="pilot">Pilot · 100 MB · 5 people</option>
+            <option value="team">Team · 1 GB · 25 people</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="client-status">Workspace access</label
+          ><select id="client-status">
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="client-reason">Reason for change</label
+          ><input
+            id="client-reason"
+            minlength="10"
+            maxlength="500"
+            required
+            aria-describedby="client-reason-hint"
+          />
+          <p id="client-reason-hint" class="field-hint">
+            Recorded for accountability. Manual changes do not collect a
+            payment.
+          </p>
+        </div>
+        <p
+          id="client-error"
+          class="form-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+        <button class="button button-navy button-wide" type="submit">
+          Review change
+        </button>
+      </form>
+    </dialog>
+    <dialog
+      id="create-dialog"
+      class="dialog small-dialog"
+      aria-labelledby="create-title"
+    >
+      <div class="dialog-top">
+        <span class="dialog-symbol"
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#users"></use></svg></span
+        ><button
+          class="icon-button dialog-close"
+          type="button"
+          aria-label="Close workspace dialog"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#close"></use>
+          </svg>
+        </button>
+      </div>
+      <h2 id="create-title">A space for your team.</h2>
+      <p class="dialog-description">
+        Keep people, files, and permissions together. You can create up to three
+        team workspaces.
+      </p>
+      <form id="create-org-form">
+        <div class="field">
+          <label for="org-name">Workspace name</label
+          ><input
+            id="org-name"
+            maxlength="80"
+            placeholder="e.g. Client projects"
+            required
+          />
+        </div>
+        <p
+          id="create-error"
+          class="form-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+        <button class="button button-primary button-wide" type="submit">
+          Create workspace
+        </button>
+      </form>
+    </dialog>
+
+    <dialog
+      id="confirm-dialog"
+      class="dialog small-dialog"
+      aria-labelledby="confirm-title"
+      aria-describedby="confirm-description"
+    >
+      <span class="dialog-symbol danger-symbol"
+        ><svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#warning"></use></svg
+      ></span>
+      <h2 id="confirm-title">Remove access?</h2>
+      <p id="confirm-description" class="dialog-description"></p>
+      <p
+        id="confirm-error"
+        class="form-error"
+        role="alert"
+        tabindex="-1"
+        hidden
+      ></p>
+      <div class="confirm-actions">
+        <button
+          id="confirm-cancel"
+          type="button"
+          class="button button-secondary"
+          autofocus
+        >
+          Keep access</button
+        ><button
+          id="confirm-action"
+          type="button"
+          class="button button-primary"
+        >
+          Remove access
+        </button>
+      </div>
+    </dialog>
+
+    <dialog
+      id="help-dialog"
+      class="dialog help-dialog"
+      aria-labelledby="help-title"
+    >
+      <div class="dialog-top">
+        <span class="dialog-symbol"
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#help"></use></svg></span
+        ><button
+          class="icon-button dialog-close"
+          type="button"
+          aria-label="Close help"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#close"></use>
+          </svg>
+        </button>
+      </div>
+      <h2 id="help-title">A clear path from send to received.</h2>
+      <p class="dialog-description">
+        Three things to know before your next handoff.
+      </p>
+      <ol class="help-steps">
+        <li>
+          <span>1</span>
+          <div>
+            <h3>Choose your file and recipient</h3>
+            <p>
+              Send a file to one email address and choose when access should
+              end. Your recipient signs in with that email to download.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span>2</span>
+          <div>
+            <h3>Give us a moment to check it</h3>
+            <p>
+              Your file stays unavailable while it’s checked for malware. If it
+              passes, we email your recipient. A blocked file cannot be
+              downloaded.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span>3</span>
+          <div>
+            <h3>Stay in control</h3>
+            <p>
+              Track status and download attempts from Transfers. Choose “Remove
+              access” to stop downloads and queue the file for deletion.
+            </p>
+          </div>
+        </li>
+      </ol>
+      <div class="protection-note">
+        <svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#shield"></use>
+        </svg>
+        <p>
+          Files use server-managed encryption. Service operators hold the keys
+          and can decrypt stored files. Scanning reduces risk; only open files
+          from people you trust.
+        </p>
+      </div>
+    </dialog>
+
+    <div id="profile-menu" class="profile-popover" popover>
+      <p class="profile-label">Signed in as</p>
+      <strong id="profile-email"></strong
+      ><button
+        id="logout"
+        class="button button-secondary button-wide"
+        type="button"
+      >
+        <svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#logout"></use>
+        </svg>
+        Sign out
+      </button>
+    </div>
+    <div id="notification" class="notification" hidden>
+      <svg id="notification-icon" class="icon" aria-hidden="true">
+        <use href="/icons.svg#check-circle"></use>
+      </svg>
+      <p id="status" role="status" aria-live="polite"></p>
+      <button
+        id="dismiss-notification"
+        type="button"
+        class="icon-button"
+        aria-label="Dismiss notification"
+      >
+        <svg class="icon" aria-hidden="true">
+          <use href="/icons.svg#close"></use>
+        </svg>
+      </button>
+    </div>
+    <noscript
+      ><p class="noscript">
+        Secure Transfer needs JavaScript for secure sign-in and file sharing.
+        Enable it in your browser and reload this page.
+      </p></noscript
+    >
+  </body>
+</html>

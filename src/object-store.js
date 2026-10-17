@@ -30,7 +30,8 @@ class FileStore {
   }
   async remove(id) { await fsp.rm(this.objectPath(id), { force: true }); }
   async *list() {
-    for (const name of await fsp.readdir(this.directory)) {
+    for await (const entry of await fsp.opendir(this.directory)) {
+      const name = entry.name;
       if (!/^[a-f\d-]{36}\.enc$/.test(name)) continue;
       const id = name.slice(0, -4);
       try { validateId(id); } catch { continue; }

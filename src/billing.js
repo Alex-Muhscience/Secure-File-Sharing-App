@@ -1,6 +1,28 @@
 const crypto = require('node:crypto');
 const { PLANS } = require('./pilot');
-function billingRoutes({ app, db, pilot, config, audit }) {
+const { administrator } = require('./analytics');
+function billingRoutes({ app, db, pilot, config, audit, payments }) {
+  app.get('/api/billing/overview', administrator, async (req, res) => {
+    const invoices = await db.collection('invoices').find({ orgId: req.org._id }, { projection: { currency: 1, amountMinor: 1, status: 1, test: 1, at: 1, number: 1, provider: 1 } }).sort({ at: -1 }).limit(50).toArray();
+    res.json({ plan: req.org.plan, limits: req.org.limits, usedBytes: req.org.usedBytes, seats: req.org.members.length,
+      subscription: req.org.subscription || { provider: 'manual', status: req.org.status, revision: 0 },
+      providers: payments.gateway.list(), catalog: payments.catalog(), invoices,
+      orders: (await payments.orders.find({ orgId: req.org._id }).sort({ createdAt: -1 }).limit(20).toArray()).map(order => payments.publicOrder(order)),
+    });
+  });
+  app.post('/api/billing/checkout', async (req, res) => res.status(201).json(await payments.checkout(req)));
+  app.get('/api/billing/orders/:id', administrator, async (req, res) => {
+    const order = await payments.orders.findOne({ _id: req.params.id, orgId: req.org._id });
+    if (!order) return res.status(404).json({ error: 'Payment unavailable' });
+    res.json(payments.publicOrder(order));
+  });
+  app.post('/api/billing/portal', async (req, res) => {
+    if (req.org.role !== 'owner') return res.status(403).json({ error: 'Only the workspace owner can manage payments' });
+    if (req.org.subscription?.provider !== 'stripe' || !req.org.subscription.customerId || !payments.gateway.stripe) return res.status(409).json({ error: 'No recurring Stripe subscription is configured' });
+    const portal = await payments.gateway.stripe.billingPortal.sessions.create({ customer: req.org.subscription.customerId, return_url: `${config.baseUrl}/#billing` });
+    if (new URL(portal.url).origin !== 'https://billing.stripe.com') throw new Error('Invalid Stripe portal URL');
+    res.json({ url: portal.url });
+  });
   app.get('/api/usage', async (req, res) => {
     const records = await db.collection('usage').find({ orgId: req.org._id }).sort({ at: -1 }).limit(100).toArray();
     res.json({ plan: req.org.plan, limits: req.org.limits, usedBytes: req.org.usedBytes, fileCount: req.org.fileCount, records });
@@ -9,6 +31,8 @@ function billingRoutes({ app, db, pilot, config, audit }) {
   app.post('/api/billing/sandbox/events', async (req, res) => {
     if (!config.billingSandbox) return res.status(404).json({ error: 'Billing sandbox is disabled' });
     if (req.org.role !== 'owner') return res.status(403).json({ error: 'Only the workspace owner can change its sandbox plan' });
+    if (req.org.adminSuspended) return res.status(403).json({ error: 'A platform administrator has paused this workspace' });
+    if (req.org.subscription?.provider && req.org.subscription.provider !== 'manual') return res.status(409).json({ error: 'Manage this paid subscription through Billing' });
     const { eventId, plan, status } = req.body;
     if (typeof eventId !== 'string' || !/^[a-z\d_-]{8,80}$/i.test(eventId) || !Object.hasOwn(PLANS, plan) || !['active', 'suspended'].includes(status)) return res.status(400).json({ error: 'Invalid sandbox event' });
     const event = { plan, status };

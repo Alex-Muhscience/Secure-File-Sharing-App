@@ -20,3 +20,7 @@ coverage
 *.log
 playwright-report
 test-results
+codex-skills
+skills-lock.json
+.hallmark
+.superpowers
