@@ -11,7 +11,7 @@ node scripts/init-local.cjs
 docker compose --env-file /dev/null -f compose.app.yaml up -d --build --wait
 ```
 
-Open **http://localhost:3081**. Sign-in codes and notifications appear in the local inbox at **http://localhost:8025**. Mailpit does not deliver email to external recipients. Keep ignored `.env.local`, its keys, and the named volumes. Initializers preserve existing credentials. `docker compose ... down` preserves volumes; do not remove them to update the app.
+Open **http://localhost:3081**. This development workspace also uses **http://secure-transfer.localhost:3081** with `APP_URL` set to that origin. Sign-in codes and notifications appear in the local inbox at **http://localhost:8025**. Mailpit does not deliver email to external recipients. Keep ignored `.env.local`, its keys, and the named volumes. Initializers preserve existing credentials. `docker compose ... down` preserves volumes; do not remove them to update the app.
 
 1. Verify your email, then select a personal or team workspace.
 2. Choose **Send a file**. Separate File → Recipient → Access → Review screens keep the task compact. Back preserves your entries.
@@ -34,14 +34,23 @@ Local plan entitlements: Pilot 100 MiB / 100 files / 5 seats; Team 1 GiB / 1,000
 
 ## Platform administration
 
-No administrator email has been chosen. The allowlist is deliberately empty. After choosing the operator identity, run:
+This development workspace explicitly enables **`admin@secure-transfer.localhost`**. Open **http://secure-transfer.localhost:3081**, sign in with that address, and retrieve its one-time code from **http://localhost:8025**. The **Platform** navigation item opens client management and platform analytics. There is no shared administrator password. The `.localhost` name is for local development; no public domain or external mailbox has been registered. Chromium was verified with this origin; use `http://localhost:3081` if your resolver does not resolve the alias.
+
+New installations still have an empty allowlist by default. To reproduce this local operator grant, run:
+
+```bash
+node scripts/configure-admin.cjs admin@secure-transfer.localhost
+docker compose --env-file /dev/null -f compose.app.yaml up -d --wait app worker
+```
+
+For a different operator identity, run:
 
 ```bash
 node scripts/configure-admin.cjs operator@your-domain.example
 docker compose --env-file /dev/null -f compose.app.yaml up -d --wait app worker
 ```
 
-Use your real operator address in place of the example. The command updates only `PLATFORM_ADMIN_EMAILS` in `.env.local`, preserves other settings/keys, and writes with mode 0600. Sign in using that email. `--remove ADDRESS` removes a grant. With S3 enabled, use both Compose files and `.env.s3` as below. Workspace ownership never implicitly grants platform privileges. Pausing a client stops application access; cancel an automatic subscription separately in the provider portal.
+Use your operator address in place of the example. The command updates only `PLATFORM_ADMIN_EMAILS` in `.env.local`, preserves other settings/keys, and writes with mode 0600. Sign in using that email. `ADDRESS --remove` removes a grant. With S3 enabled, use both Compose files and `.env.s3` as below. Local `APP_URL=http://secure-transfer.localhost:3081` and `EMAIL_FROM=Secure Transfer <admin@secure-transfer.localhost>` are optional `.env.local` settings for links and local mail. Granting one exact address never grants other addresses at that domain. Workspace ownership never implicitly grants platform privileges. Pausing a client stops application access; cancel an automatic subscription separately in the provider portal.
 
 ## Billing setup
 
@@ -135,4 +144,6 @@ OTP codes expire after ten minutes, allow five attempts and can be consumed once
 
 Local MongoDB is unauthenticated on a private network. Filesystem and Garage storage are local single-instance infrastructure. Production requires authenticated/TLS services, managed keys/storage, external email, chosen operator identity, merchant onboarding, backup/rollback/load drills, alerts/support ownership and independent security review. SSO/SCIM, regional redundancy and immutable external audit retention are not implemented. Historical exposed credentials still require provider rotation; Git history has not been rewritten. Legacy models/middleware/utils and the old deployment are historical references, unused by the current runtime.
 
-See [delivery status](docs/DELIVERY_STATUS.md), [operations](docs/OPERATIONS.md), [interface specification](design.md) and the [historical audit](ENTERPRISE_AUDIT_AND_PLAN.md). The enterprise foundation landed through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6). Final review corrections are in [PR #7](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/7), which requires separate owner approval before merging.
+See [delivery status](docs/DELIVERY_STATUS.md), [operations](docs/OPERATIONS.md), [interface specification](design.md) and the [historical audit](ENTERPRISE_AUDIT_AND_PLAN.md). The enterprise foundation landed through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6). Final review corrections landed through [PR #7](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/7) after owner approval.
+
+The [industry compression design](docs/superpowers/specs/2026-10-17-industry-compression-design.md) proposes a custom lossless codec, measured codec comparisons, and separate compression/export/restore workflows. These are planned work, not implemented v0.5.0 features.
