@@ -43,6 +43,72 @@ test("portable archive streams exact originals, safe names, full checksums and e
     }
   }
 });
+test("multi-frame restore requires ordered allowlisted records and exact finality", async () => {
+  const first = Buffer.from("first"),
+    second = Buffer.from("second");
+  const digest = (bytes) =>
+    crypto.createHash("sha256").update(bytes).digest("hex");
+  const json = (value) => {
+    const body = Buffer.from(JSON.stringify(value)),
+      length = Buffer.alloc(4);
+    length.writeUInt32LE(body.length);
+    return Buffer.concat([length, body]);
+  };
+  const frame = (bytes, index, codec = "none") =>
+    Buffer.concat([
+      json({
+        kind: "data",
+        index,
+        codec,
+        size: bytes.length,
+        storedSize: bytes.length,
+        sha256: digest(bytes),
+      }),
+      bytes,
+    ]);
+  const original = Buffer.concat([first, second]);
+  const header = Buffer.concat([
+    Buffer.from("STC1"),
+    json({ version: 1, name: "ordered.bin", size: original.length }),
+  ]);
+  const end = json({
+    kind: "end",
+    count: 2,
+    size: original.length,
+    sha256: digest(original),
+  });
+  const valid = Buffer.concat([header, frame(first, 0), frame(second, 1), end]);
+  assert.deepEqual(
+    await collect(
+      (await restore([valid], { maxOutputBytes: original.length })).stream,
+    ),
+    original,
+  );
+  for (const body of [
+    Buffer.concat([header, frame(second, 1), frame(first, 0), end]),
+    Buffer.concat([header, frame(first, 0, "unknown"), frame(second, 1), end]),
+    Buffer.concat([header, frame(first, 0), frame(second, 1)]),
+    Buffer.concat([valid, valid]),
+    Buffer.concat([header, Buffer.from([255, 255, 255, 127])]),
+    Buffer.concat([
+      header,
+      json({
+        kind: "data",
+        index: 0,
+        codec: "none",
+        size: 0,
+        storedSize: 0,
+        sha256: digest(Buffer.alloc(0)),
+      }),
+      end,
+    ]),
+  ])
+    await assert.rejects(async () =>
+      collect(
+        (await restore([body], { maxOutputBytes: original.length })).stream,
+      ),
+    );
+});
 test("archive reader rejects bombs, corruption and wrong ordered frames and reuses verified custom parts", async () => {
   const original = Buffer.alloc(256000, 65),
     sha256 = crypto.createHash("sha256").update(original).digest("hex");

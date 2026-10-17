@@ -9,7 +9,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext(), page = await context.newPage();
-    const oldVerification = deferred(), verifying = deferred(), exportGate = deferred(), exporting = deferred();
+    const oldVerification = deferred(), verifying = deferred(), exportGate = deferred(), exporting = deferred(), compressionGate = deferred(), inspectingCompression = deferred();
     const first = 'personal_fixture', second = 'workspace_fixture', email = 'new@example.com';
     let holdVerification = true, heldExport = false;
     const orgs = [first, second].map((_id, i) => ({ _id, name: i ? 'Second workspace' : 'Personal workspace', owner: email, members: [{ email, role: 'owner' }], plan: 'pilot', status: 'active', usedBytes: 0, fileCount: 0, limits: { storageBytes: 1000, files: 100, seats: 5 } }));
@@ -27,6 +27,10 @@ async function main() {
       if (endpoint === '/api/files') return send({ files: [] });
       if (endpoint === '/api/usage') return send({ plan: 'pilot', limits: orgs[0].limits, usedBytes: 0, fileCount: 0 });
       if (endpoint === '/api/operations') return send({ workerAvailable: true, transfers: {}, pendingNotifications: 0 });
+      if (endpoint === '/api/file/previous-compression/compression') {
+        inspectingCompression.resolve(); await compressionGate.promise;
+        return send({ error: 'Previous compression private error' }, 503);
+      }
       if (endpoint === '/api/audit/export') {
         if (!heldExport) { heldExport = true; exporting.resolve(); await exportGate.promise; return send({ error: 'Previous workspace private error' }, 503); }
         return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{}\n' });
@@ -60,6 +64,17 @@ async function main() {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.doesNotMatch(await page.locator('#status').textContent(), /Previous workspace private error/, 'A stale action error must not appear in the new context');
     assert.equal(await page.locator('#audit-export').isEnabled(), true);
+    await page.evaluate(() => { compressionUI.show('previous-compression', document.querySelector('#new-compression')); });
+    await inspectingCompression.promise;
+    await page.evaluate(() => {
+      compressionUI.context();
+      compressionUI.open(document.querySelector('#new-compression'));
+    });
+    compressionGate.resolve();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.locator('#compression-actions').isVisible(), true);
+    assert.equal(await page.locator('#compression-title').textContent(), 'What would you like to do?');
+    assert.doesNotMatch(await page.locator('#compression-dialog').textContent(), /Previous compression private error/);
     console.log('PASS: superseded sign-in cannot install an old identity; stale action failures cannot affect a newer workspace or reused control');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 }

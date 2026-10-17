@@ -1,10 +1,10 @@
-# Secure Transfer — v0.5.0
+# Secure Transfer — v0.6.0
 
-An encrypted file-sharing application with compact navy, scarlet and white screens, team workspaces, platform administration, usage analytics and configurable billing. Built with Node 24, Express, MongoDB and private filesystem/S3 storage. **This release is for local pilot use.** Production infrastructure, merchant accounts and full-scale validation remain operator work. Secure Transfer is the working name; branding is still open.
+An encrypted file-sharing and lossless compression application with compact navy, scarlet and white screens, file-category/industry guidance, team workspaces, platform administration, usage analytics and configurable billing. Built with Node 24, Express, MongoDB and private filesystem/S3 storage. **This release is for local pilot use.** Production infrastructure, merchant accounts and full-scale validation remain operator work. Secure Transfer is the working name; branding is still open.
 
 ## Run locally
 
-Requires Node 24 and Docker Compose. Allow about 2 GB for ClamAV plus application/database memory.
+Requires Node **24.19 or later in the 24.x line** and Docker Compose. Strict compressed-stream checks use the newer Node 24 APIs; the tested runtime is 24.21. Allow about 2 GB for ClamAV plus application/database memory.
 
 ```bash
 node scripts/init-local.cjs
@@ -14,9 +14,9 @@ docker compose --env-file /dev/null -f compose.app.yaml up -d --build --wait
 Open **http://localhost:3081**. This development workspace also uses **http://secure-transfer.localhost:3081** with `APP_URL` set to that origin. Sign-in codes and notifications appear in the local inbox at **http://localhost:8025**. Mailpit does not deliver email to external recipients. Keep ignored `.env.local`, its keys, and the named volumes. Initializers preserve existing credentials. `docker compose ... down` preserves volumes; do not remove them to update the app.
 
 1. Verify your email, then select a personal or team workspace.
-2. Choose **Send a file**. Separate File → Recipient → Access → Review screens keep the task compact. Back preserves your entries.
-3. Select automatic, maximum or no compression. Upload progress reflects accepted chunks; pause and resume by reselecting the same unmodified original file.
-4. Copy the recipient link. Files stay quarantined until inspection succeeds. Recipients verify their email to download; the browser handles the file without buffering the entire download in page memory.
+2. Choose **Compress a file**, then **Compress and download**, **Compress and send**, or **Restore an archive**. File type → File → Options → Review screens keep the task compact. Back preserves your entries. The original **Send a file** flow remains available.
+3. Select **Fast transfer**, **Smallest archive**, the experimental **custom-engine comparison**, or original storage. Eligible chunks are compressed in a browser worker before upload; pause/resume keeps logical offsets and exact original checksums. Reselect the same unmodified original to resume.
+4. After inspection, download a `.stc` or standard `.gz` archive, download the exact original, or copy the recipient link. Private compression/restore jobs require no recipient and send no email. Recipients verify their email before downloading. Native downloads avoid whole-file page-memory buffering.
 5. Workspace owners/admins can open **Analytics**, **Billing** and **Workspace settings**. Platform operators receive a separate **Platform** screen only after explicit server configuration.
 
 Owners/admins manage workspace transfers and members; members manage their own files; viewers cannot upload or revoke. Removing membership also invalidates older recipient grants. Expiry, revocation, current roles and subscription access are checked on the server. Notifications retry after failures; SMTP delivery is at least once.
@@ -29,6 +29,9 @@ Owners/admins manage workspace transfers and members; members manage their own f
 - Separate platform Clients/Analytics screens, paginated client search, aggregate analytics, guarded manual subscriptions and separate access suspension with audit reasons. Platform access never grants file-content access.
 - Stripe recurring **or prepaid** checkout, M-Pesa prepaid renewals and a configurable crypto adapter. Checkout remains **off** until configured; no prices, currency, administrator identity or merchant credentials are supplied by default.
 - Resumable, encrypted chunk uploads; authenticated range downloads; scanning with backpressure; encrypted streaming snapshots; verified migration and key rewrapping.
+- Six file categories with business, finance/legal, healthcare/research, engineering, creative and education guidance. Industry choices do not imply regulatory certification or change the original format.
+- A real custom STP1 predictor/bit-packing codec, adaptive Brotli/Zstandard comparisons, gzip interoperability and versioned STC1 archives with exact offline/in-app restore. Existing files remain readable.
+- Measured archive targets, separate original/archived download analytics and observed upload payload accounting. Storage savings are never presented as network savings or guaranteed archive ratios.
 
 Local plan entitlements: Pilot 100 MiB / 100 files / 5 seats; Team 1 GiB / 1,000 files / 25 seats; Enterprise 10 TiB / 10,000 files / 500 seats. These are configurable-product entitlements in the source, not commercial prices or proven deployment capacities. Reservations account for original bytes. Sandbox changes collect no money and cannot override paid subscriptions or an operator suspension. A personal owner may create up to three team workspaces.
 
@@ -66,11 +69,29 @@ See [billing configuration and reconciliation](docs/BILLING.md) for the catalog 
 
 The application accepts an explicitly configured target up to **5 TiB** using 8–16 MiB encrypted chunks, persisted offsets/checksums and streaming reads. This is an architectural/configuration ceiling, **not a demonstrated 5 TB production transfer**. Larger inspection requires an operator-provided HTTPS scanner implementing the full-byte contract, provisioned storage/network capacity and representative recovery/load trials. See [large-file configuration and format](docs/LARGE_FILES.md).
 
-Each chunk is optionally compressed with Brotli before AES-256-GCM encryption, using an independent random data key wrapped by the server keyring. A keyed manifest binds the complete ordered file. Each chunk authenticates before its plaintext is released; excessive decompression and incomplete/tampered sequences fail. Snapshots use libsodium XChaCha20-Poly1305 secretstream. Existing GCM files and prior STBK1 snapshots remain readable; the old CBC prototype requires a separate migration.
+Each chunk is optionally compressed with Brotli, Zstandard or the custom STP1 codec before AES-256-GCM encryption, using an independent random data key wrapped by the server keyring. A keyed manifest binds the complete ordered file. Each chunk authenticates before its plaintext is released; excessive decompression and incomplete/tampered sequences fail. Zstandard decoder windows are capped at 16 MiB. Snapshots use libsodium XChaCha20-Poly1305 secretstream. Existing GCM files and prior STBK1 snapshots remain readable; the old CBC prototype requires a separate migration.
 
-The [1 GiB synthetic benchmark](docs/benchmarks/2026-10-17-one-gib.json) achieved **74.975% storage reduction**, **180.4 MiB peak process RSS**, and an exact SHA-256 download match. Its input was deliberately 75% repetitive data, and its scanner only counted bytes. It establishes neither a typical compression ratio nor terabyte malware-scanning throughput. Already compressed/encrypted files may shrink little or not at all. Maximum compression is slower and cannot guarantee 75–80% savings or outperform every compressor.
+The target is **75% archive reduction**: a 1 GB original produces an archive at most 250 MB, including every header/checksum. Results are reported per file as met/not met/not measured. The [codec comparison](docs/benchmarks/2026-10-17-codec-comparison.json) includes all candidates and losses. Our custom STP1 achieved **86.96%** reduction on a deliberately correlated synthetic probe, beating the tested Brotli/Zstandard/gzip settings there; established codecs won the general fixtures. This is specialized evidence, not a claim of universal superiority. A frozen synthetic corpus is not a representative customer/industry benchmark.
+
+The earlier [1 GiB synthetic benchmark](docs/benchmarks/2026-10-17-one-gib.json) achieved 74.975% **storage** reduction and a SHA-256 match on deliberately repetitive input with a counting-only scanner. It does not establish typical archive ratios or terabyte inspection throughput. Already compressed/encrypted files can shrink little or grow with archive overhead. A universal 75–80% lossless guarantee is impossible.
 
 Encryption is **server managed**, not end to end: authorized server operators can decrypt content. Keys currently come from protected environment configuration; managed KMS/HSM, independent security assessment and production controls remain external gates. No “world's strongest” or certification claim is made.
+
+## Compressed downloads and restore
+
+`.stc` is our documented single-file container for bounded, explicit codecs and complete SHA-256/finality verification. Use **Restore an archive** to reconstruct and inspect its original. The service reserves space for both the input archive and the restored original; canceling/failing work releases reservations through cleanup. Standard `.gz` exports open in normal gzip tools. These downloaded archives are **not encrypted**; encryption protects stored content.
+
+Offline restore requires the same Node runtime:
+
+```bash
+node scripts/stc.cjs restore downloaded.stc restored-original
+# Explicit larger output budget, for example 1 GiB:
+node scripts/stc.cjs restore downloaded.stc restored-original --max-bytes 1073741824
+```
+
+The CLI defaults to a 10 MiB output cap, verifies the whole archive before publishing its output, and never overwrites an existing destination. The explicit cap can be raised up to 5 TiB; that does not prove infrastructure capacity. Existing original downloads retain byte-range resume. Generated archive exports require a fresh request after interruption and do not advertise ranges. Each representation has a separate native download grant, with current membership, subscription, expiry and revocation enforced.
+
+See [format, codec settings and reproducible measurements](docs/COMPRESSION.md). Compression can save network time on constrained links and add CPU time on fast links; Fast transfer and Smallest archive serve different goals. HTTP fixture results exclude TCP/TLS/API-metadata overhead and browser CPU. The existing quick-send defaults remain available while performance gates and representative customer validation are evaluated.
 
 ## Optional private S3 storage
 
@@ -126,6 +147,8 @@ Protected API requests use `Authorization: Bearer <token>` and optional `X-Organ
 | POST | `/api/upload` | Bounded legacy multipart upload |
 | GET | `/api/files` | Authorized recent transfers, optional `transfer` UUID lookup |
 | GET | `/api/file/:id/download` | Bearer-authenticated attachment; single byte ranges |
+| GET | `/api/file/:id/export/{stc,gzip}` | Guarded streaming compressed archive; no byte ranges |
+| GET | `/api/file/:id/compression` | Authorized job status, codec counts and measured export sizes |
 | POST | `/api/file/:id/download-ticket` | One-use native-download handoff |
 | GET | `/api/download/:ticketOrFileId` | Handoff or scoped browser attachment/resume |
 | DELETE | `/api/file/:id` | Revoke immediately and queue physical deletion |
@@ -146,4 +169,6 @@ Local MongoDB is unauthenticated on a private network. Filesystem and Garage sto
 
 See [delivery status](docs/DELIVERY_STATUS.md), [operations](docs/OPERATIONS.md), [interface specification](design.md) and the [historical audit](ENTERPRISE_AUDIT_AND_PLAN.md). The enterprise foundation landed through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6). Final review corrections landed through [PR #7](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/7) after owner approval.
 
-The [industry compression design](docs/superpowers/specs/2026-10-17-industry-compression-design.md) and [revised implementation plan](docs/superpowers/plans/2026-10-17-industry-compression.md) propose a custom lossless codec, measured codec comparisons, separate compression/export/restore workflows, browser-side upload compression and faster compressed downloads. They target at least 75% size reduction on declared compressible inputs and measured end-to-end speed improvements, with per-file misses reported explicitly. Neither target is an established result or a universal lossless guarantee. These are planned work, not implemented v0.5.0 features.
+The [industry compression design](docs/superpowers/specs/2026-10-17-industry-compression-design.md) and [implementation plan](docs/superpowers/plans/2026-10-17-industry-compression.md) track v0.6.0 through [PR #8](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/8). That PR requires a separate owner merge decision. Compression ratios and speed remain measured, input-dependent results; actual 1–5 TB operation and production acceptance remain unvalidated.
+
+Final v0.6.0 [per-file ratios, WAN/LAN timing ranges, concurrent/resumed results and default decision](docs/benchmarks/2026-10-18-summary.md): 5/8 nonempty synthetic fixtures meet the 75% target using the best tested setting. Custom STP1 meets it on the specialized probe, not the general set. LAN/tiny-file regressions keep legacy defaults in place.

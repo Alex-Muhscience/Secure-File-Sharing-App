@@ -1,6 +1,6 @@
 # Industry workflows and a measured custom compression engine
 
-Status: original design approved on 2026-10-17. Revised to include the owner's 75% reduction target and upload/download speed request; the revised performance/transport scope awaits review. Working version: v0.6.0.
+Status: owner approved the revised design and plan on 2026-10-17. Native implementation and final release verification are underway for v0.6.0.
 
 ## Intent and agreed scope
 
