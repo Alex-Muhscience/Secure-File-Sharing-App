@@ -1,6 +1,6 @@
 # Industry workflows and a measured custom compression engine
 
-Status: owner approved the written design on 2026-10-17 and requested a revision to the implementation plan; revision details are pending. Working version: v0.6.0.
+Status: original design approved on 2026-10-17. Revised to include the owner's 75% reduction target and upload/download speed request; the revised performance/transport scope awaits review. Working version: v0.6.0.
 
 ## Intent and agreed scope
 
@@ -9,6 +9,22 @@ The owner wants Secure Transfer to serve different industries and file formats t
 The owner selected all six initial file categories: documents/office files, structured data, developer files, images, audio/video, and mixed archives. The owner selected a custom codec compared with established codecs. Lossless restoration is the default assumption: original bytes, metadata inside the file, signatures and encodings must survive exactly. Industry selection guides recommendations; it is not a claim of regulatory certification or an access-control boundary.
 
 Existing navy/scarlet/white styling, compact steps, workspace roles, subscriptions, scanning, encryption, resumability and original-file downloads remain part of the product. The existing 10 MiB local acceptance limit stays in place; the 1–5 TB target requires separate actual-size infrastructure validation.
+
+## Requested reduction and speed targets
+
+The owner requests at least **75% reduction**, interpreted as a 1 GB original producing an archive no larger than 250 MB. Define the measured reduction as `1 - completeArchiveBytes / originalBytes`, counting all archive headers, frame metadata, checksums and final records. Empty inputs have no percentage. Encrypted storage bytes, logical bytes and actual HTTP request/response bytes are separate metrics and cannot substitute for the archive size.
+
+This is an engineering/research target on declared, representative compressible inputs, not a universal lossless guarantee. A counting argument prevents a lossless codec from shrinking every possible input; encrypted data, compressed media and small files can miss this target. Never change bytes, silently use lossy conversion, omit hard inputs or claim a synthetic fixture establishes a whole industry's ratio. Every file result reports **target met**, **target not met**, or **not measured**, along with exact sizes. A miss remains a miss and offers the original or the best verified archive. Unmet targets remain visible in the release report; they are not reclassified as successes.
+
+Two explicit modes balance the competing goals. **Fast transfer** minimizes measured end-to-end completion time, uses inexpensive sampling and abandons compression when its CPU cost outweighs the expected network saving. **Smallest archive** searches bounded candidates against the 75% target and may take longer. Research mode compares the custom codec with the same established baselines; an established codec's success is never attributed to the custom algorithm.
+
+Speed work must reduce actual network traffic and/or actual completion time. The v0.5.0 server compresses after receiving plaintext chunks and sends decompressed originals, so reduced stored bytes alone do not demonstrate faster uploads or downloads. Add optional browser-worker chunk compression before upload, negotiate explicit wire codec IDs, and retain raw fallback. Server decoding checks exact expected logical size/checksum under strict output/CPU bounds before storage or inspection. Raw legacy chunks remain supported. Compression operates before server-managed encryption; production transport still requires HTTPS.
+
+Download an explicit compressed representation to reduce response bytes, with an exact offline/in-app restore path. Reuse authenticated encoded chunks for compatible `.stc` exports instead of decoding and recompressing them on every request; validate descriptors and codec bounds, and verify original bytes where required before release. Legacy files and incompatible frame sizes use a bounded conversion path. Original downloads retain their range/resume semantics. A regenerated compressed stream does not claim byte-range support; a cached/materialized representation requires its own immutable representation ID, quota accounting and verified lifecycle before ranges can be enabled. No speed claim may omit the necessary restore/decode time or weaken authorization, scanning or integrity checks.
+
+Measure v0.5.0 and candidate paths with the same file hashes, scanner, storage backend, limits and controlled bandwidth/latency. Record client encode time, actual request bytes, durable upload time, inspection/ready time, response bytes, first-byte latency, archive download time, restore time, verified end-to-end time, CPU and peak RSS. Include 1 and 4 concurrent clients, interrupted/resumed transfers, bandwidth-limited and fast local links. Seek at least 20% lower median completion time on the declared bandwidth-limited compressible test set; this is a proposed acceptance target, not a measured result. Do not promote a new default with more than 5% median regression on another declared comparison case unless the owner accepts the documented tradeoff. Compression ratio mode and fast mode are evaluated separately.
+
+The initial optimization loop allows at most 12 one-hypothesis variants or 60 minutes of tuning, whichever comes first, against a pinned corpus and a held-out subset. Repeat baseline and selected candidate five times for confirmation and publish median/range and every miss. The tuning budget excludes full correctness/release checks. If representative inputs, time or infrastructure are insufficient, report that validation as incomplete rather than lowering the target or claiming universal success.
 
 ## Alternatives and decision
 
@@ -26,7 +42,7 @@ The compression flow has four screens, with Back retaining values:
 
 1. **File type:** choose one of six categories. A concise industry/use-case selector (general business, finance/legal, healthcare/research, engineering/data, creative/media, education) changes examples and guidance without silently changing security or converting formats.
 2. **File:** select one file, see the detected format and expected compressibility. Extensions and MIME are hints; bounded signatures/content sampling guide recommendations. Mismatches are explained and may be overridden for generic binary processing. A type hint never replaces malware inspection.
-3. **Options:** choose balanced, smallest result, or original; choose a portable gzip export or Secure Transfer archive. Advanced settings offer the experimental custom engine. Sending additionally asks for recipient and expiry. Download-only jobs require no recipient and are private to the submitting workspace/user under existing roles.
+3. **Options:** choose Fast transfer, Smallest archive, or original; choose a portable gzip export or Secure Transfer archive. Advanced settings offer the experimental custom engine. Sending additionally asks for recipient and expiry. Download-only jobs require no recipient and are private to the submitting workspace/user under existing roles.
 4. **Review and result:** show the action, original size, selected format and access settings before starting. After inspection, show actual archive bytes, storage bytes separately, measured savings and codec(s), with the intended download or share action. A larger archive is reported honestly, with an original-file alternative. A paused or failed operation remains recoverable.
 
 JPEG/PNG, video/audio encodings, DOCX/XLSX/PPTX, PDF and archives are accepted as bytes. Already compressed inputs often have limited further savings. No lossy conversion, file-format rewrite, medical image interpretation, archive extraction, or signature stripping occurs. Unknown formats use the generic path. The first release processes one file per job; directory/batch archives can follow without changing the codec contract.
@@ -42,6 +58,8 @@ The bitstream has explicit magic/version, original length, bounded block descrip
 ### Adaptive selector
 
 Place codec selection behind a small encode/decode interface. Preserve legacy `br` and `none` readers. Add explicit codec IDs for Zstandard and the custom v1 codec. Persist the chosen codec per part, authenticated by the current GCM associated data and ordered manifest. Never infer a decoder from the user-selected category.
+
+Keep the custom predictor/packing core portable between Node and a browser Web Worker, using bounded byte arrays and fixed compatibility vectors. Node/browser wrappers provide their platform SHA-256 APIs. Browser gzip support is feature-detected; browsers without the fast path retain raw resumable uploads. No browser-wide whole-file buffer or unbounded speculative compression pool is permitted.
 
 Balanced mode uses representative bounded sampling and limited candidate work; smallest mode serializes expensive encoders and compares full candidate lengths. Custom research mode explicitly opts into evaluating STC v1. Only retain a candidate that beats the original by the configured threshold after format overhead. Defaults must not promise that the fastest/best sample is the global optimum. CPU/memory/concurrency bounds and cancellation apply to new encoders as to existing uploads.
 
@@ -75,4 +93,4 @@ Keep the identity in ignored `.env.local`, preserve every existing key and servi
 
 This release delivers usable workflows and a documented, tested first custom codec. Independent codec research/novelty, comprehensive competitor benchmarks, representative customer corpus results, 1–5 TB trials, production managed keys and regulatory certification are separate evidence gates. No target savings, universal dominance, custom-cryptography strength or compliance is inferred from industry labels.
 
-Primary references: [Node 24 zlib API](https://nodejs.org/download/release/v24.21.0/docs/api/zlib.html), [Zstandard format (RFC 8878)](https://www.rfc-editor.org/rfc/rfc8878.html), [special-use localhost names (RFC 6761 §6.3)](https://www.rfc-editor.org/rfc/rfc6761.html#section-6.3).
+Primary references: [lossless compression limits (RFC 1951 §1.1)](https://www.rfc-editor.org/rfc/rfc1951.html#section-1.1), [Node 24 zlib API and performance considerations](https://nodejs.org/download/release/v24.21.0/docs/api/zlib.html), [browser Compression Streams](https://compression.spec.whatwg.org/), [Zstandard format (RFC 8878)](https://www.rfc-editor.org/rfc/rfc8878.html), [special-use localhost names (RFC 6761 §6.3)](https://www.rfc-editor.org/rfc/rfc6761.html#section-6.3).
