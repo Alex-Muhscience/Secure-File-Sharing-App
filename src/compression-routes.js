@@ -176,6 +176,7 @@ function compressionRoutes({
       scanResult: file.scanResult,
       purpose: file.purpose || "send",
       profile: file.profile || "documents",
+      exportFormat: file.exportFormat === "gzip" ? "gzip" : "stc",
       originalBytes: file.size,
       storedBytes: file.storedSize ?? file.size,
       uploadPayloadBytes: file.uploadPayloadBytes ?? null,

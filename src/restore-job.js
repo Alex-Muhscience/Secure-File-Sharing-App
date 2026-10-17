@@ -131,6 +131,7 @@ async function restoreJob(worker, parent) {
         orgId: parent.orgId,
         reservationId,
         format: "segments-v1",
+        internalRestore: true,
         purpose: "compress",
         profile: parent.profile || "documents",
         size: opened.metadata.size,
@@ -352,23 +353,21 @@ async function recordCompletion(worker, parent, child) {
     parent = await db.collection("transfers").findOne({ _id: parent._id });
   }
   if (parent?.status === "active" && parent.expiresAt > new Date()) {
-    await db
-      .collection("transfers")
-      .updateOne(
-        {
-          _id: child._id,
-          status: "quarantined",
-          pendingRestoreParent: parent._id,
+    await db.collection("transfers").updateOne(
+      {
+        _id: child._id,
+        status: "quarantined",
+        pendingRestoreParent: parent._id,
+      },
+      {
+        $set: { status: "active" },
+        $unset: {
+          pendingRestoreParent: "",
+          scanLease: "",
+          scanLeaseUntil: "",
         },
-        {
-          $set: { status: "active" },
-          $unset: {
-            pendingRestoreParent: "",
-            scanLease: "",
-            scanLeaseUntil: "",
-          },
-        },
-      );
+      },
+    );
   }
   await db
     .collection("uploads")
@@ -376,37 +375,33 @@ async function recordCompletion(worker, parent, child) {
       { _id: child._id, status: "finalizing" },
       { $set: { status: "complete" } },
     );
-  await db
-    .collection("usage")
-    .updateOne(
-      { _id: `upload:${child._id}` },
-      {
-        $setOnInsert: {
-          orgId: child.orgId,
-          type: "upload",
-          bytes: child.size,
-          storedBytes: child.storedSize,
-          fileId: child._id,
-          at: child.createdAt,
-        },
+  await db.collection("usage").updateOne(
+    { _id: `upload:${child._id}` },
+    {
+      $setOnInsert: {
+        orgId: child.orgId,
+        type: "upload",
+        bytes: child.size,
+        storedBytes: child.storedSize,
+        fileId: child._id,
+        at: child.createdAt,
       },
-      { upsert: true },
-    );
-  await db
-    .collection("audit")
-    .updateOne(
-      { _id: `restore:${parent._id}` },
-      {
-        $setOnInsert: {
-          action: "RESTORE",
-          actor: parent.owner,
-          orgId: parent.orgId,
-          transferId: child._id,
-          at: parent.scannedAt || new Date(),
-        },
+    },
+    { upsert: true },
+  );
+  await db.collection("audit").updateOne(
+    { _id: `restore:${parent._id}` },
+    {
+      $setOnInsert: {
+        action: "RESTORE",
+        actor: parent.owner,
+        orgId: parent.orgId,
+        transferId: child._id,
+        at: parent.scannedAt || new Date(),
       },
-      { upsert: true },
-    );
+    },
+    { upsert: true },
+  );
   await db
     .collection("transfers")
     .updateOne(

@@ -161,7 +161,11 @@ function resumableRoutes({
     purpose: row.purpose || 'send', profile: row.profile || 'documents', exportFormat: row.exportFormat || 'stc',
     expiresAt: row.expiresAt,
   });
+  // Public resumable uploads have a fingerprint; internal restore stages do not.
+  // The fingerprint constraint also protects stages created before the marker.
+  const publicUpload = { internalRestore: { $ne: true }, fingerprint: { $type: "string" } };
   const owner = (req) => ({
+    ...publicUpload,
     _id: req.params.id,
     owner: req.identity,
     orgId: req.org._id,
@@ -191,6 +195,7 @@ function resumableRoutes({
   app.get("/api/uploads", async (req, res) => {
     const rows = await uploads
       .find({
+        ...publicUpload,
         owner: req.identity,
         orgId: req.org._id,
         status: { $in: ["uploading", "finalizing"] },
@@ -244,6 +249,7 @@ function resumableRoutes({
     if (resumeId !== undefined && !idValid(resumeId))
       throw failure(400, "Invalid upload to resume");
     const match = {
+      ...publicUpload,
       ...(resumeId ? { _id: resumeId } : {}),
       owner: req.identity,
       orgId: req.org._id,
@@ -493,6 +499,7 @@ function resumableRoutes({
         .collection("transfers")
         .findOne({
           _id: req.params.id,
+          restoreParentId: { $exists: false },
           owner: req.identity,
           orgId: req.org._id,
         }));

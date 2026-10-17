@@ -11,7 +11,7 @@ async function main() {
     const context = await browser.newContext(), page = await context.newPage();
     const oldVerification = deferred(), verifying = deferred(), exportGate = deferred(), exporting = deferred(), compressionGate = deferred(), inspectingCompression = deferred();
     const first = 'personal_fixture', second = 'workspace_fixture', email = 'new@example.com';
-    let holdVerification = true, heldExport = false;
+    let holdVerification = true, heldExport = false, compressionPolls = 0;
     const orgs = [first, second].map((_id, i) => ({ _id, name: i ? 'Second workspace' : 'Personal workspace', owner: email, members: [{ email, role: 'owner' }], plan: 'pilot', status: 'active', usedBytes: 0, fileCount: 0, limits: { storageBytes: 1000, files: 100, seats: 5 } }));
     await page.route('**/api/**', async route => {
       const request = route.request(), endpoint = new URL(request.url()).pathname;
@@ -30,6 +30,10 @@ async function main() {
       if (endpoint === '/api/file/previous-compression/compression') {
         inspectingCompression.resolve(); await compressionGate.promise;
         return send({ error: 'Previous compression private error' }, 503);
+      }
+      if (endpoint === '/api/file/retry-compression/compression') {
+        if (compressionPolls++ === 0) return send({error:'Status temporarily unavailable'},503);
+        return send({fileId:'retry-compression',name:'records.txt',status:'active',purpose:'send',profile:'documents',exportFormat:'gzip',originalBytes:4,storedBytes:4,codecCounts:[],exports:{}});
       }
       if (endpoint === '/api/audit/export') {
         if (!heldExport) { heldExport = true; exporting.resolve(); await exportGate.promise; return send({ error: 'Previous workspace private error' }, 503); }
@@ -75,6 +79,39 @@ async function main() {
     assert.equal(await page.locator('#compression-actions').isVisible(), true);
     assert.equal(await page.locator('#compression-title').textContent(), 'What would you like to do?');
     assert.doesNotMatch(await page.locator('#compression-dialog').textContent(), /Previous compression private error/);
+    for (const lostCompletion of process.env.UI_RACE_ONLY === 'format' ? [] : [false,true]) {
+      compressionPolls = lostCompletion ? 1 : 0;
+      await page.evaluate(lost => {
+        compressionUI.context(); compressionUI.open(document.querySelector('#new-compression'));
+        window.compressionRequests=[];
+        resumable.send=async (file,settings,signal,hooks) => {
+          window.compressionRequests.push(settings); hooks.session({uploadId:'retry-compression'});
+          if(lost)throw new Error('Completion response lost');
+          return {fileId:'retry-compression',wireSentBytes:4};
+        };
+      },lostCompletion);
+      await page.locator('[data-compression-action="send"]').click();
+      await page.locator('#compression-next').click();
+      await page.locator('#compression-file').setInputFiles({name:'records.txt',mimeType:'text/plain',buffer:Buffer.from('data')});
+      await page.locator('#compression-next').click();
+      await page.locator('#compression-recipient').fill('alice@example.com');
+      await page.locator('#compression-format').selectOption('gzip');
+      await page.locator('#compression-next').click();
+      await page.locator('#compression-submit').click();
+      await page.locator('#compression-error').waitFor({state:'visible'});
+      assert.equal(await page.locator('#compression-back').isDisabled(),true,'A saved job must not be attached to edited settings after a retry');
+      assert.equal(await page.locator('#compression-recipient').isDisabled(),true);
+      assert.equal(await page.locator('#compression-mode').isDisabled(),true);
+      assert.equal(await page.locator('#compression-recipient').inputValue(),'alice@example.com');
+      await page.locator('#compression-submit').click();
+      await page.locator('#compression-result').waitFor({state:'visible'});
+      assert.equal(await page.evaluate(()=>window.compressionRequests.length),1,'Retry polls the original job without sending to another recipient');
+      await page.locator('#compression-done').click();
+    }
+    compressionPolls = 1;
+    await page.evaluate(()=>{compressionUI.show('retry-compression',document.querySelector('#new-compression'));});
+    await page.locator('#compression-result').waitFor({state:'visible'});
+    assert.equal(await page.locator('#compression-format').inputValue(),'gzip','Reopened jobs retain the saved portable format');
     console.log('PASS: superseded sign-in cannot install an old identity; stale action failures cannot affect a newer workspace or reused control');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 }

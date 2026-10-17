@@ -200,6 +200,7 @@ test("private compression jobs accept compressed chunks without recipients or ma
     await c.request(`/api/file/${file.fileId}/compression`)
   ).json();
   assert.equal(info.originalBytes, original.length);
+  assert.equal(info.exportFormat, "stc");
   assert.ok(
     info.uploadPayloadBytes < original.length,
     "Server measures received compressed upload payload separately",
@@ -451,5 +452,126 @@ test("a published restore repairs interrupted usage and audit recording exactly 
     (await collection("transfers").findOne({ _id: file.fileId }))
       .restoreRecorded,
     true,
+  );
+});
+test("internal restore stages cannot be listed, resumed or finalized through public upload routes", async (t) => {
+  const c = await setup(t),
+    original = Buffer.from("Recover only after inspection.\n".repeat(300));
+  const input = await collect(
+    archive([original], { name: "internal.txt", size: original.length }),
+  );
+  const parent = await c.upload(input, { purpose: "restore" });
+  const scan = c.running.worker.scanner.scanStream;
+  c.running.worker.scanner.scanStream = async () => {
+    throw new Error("Scanner unavailable");
+  };
+  await c.running.worker.tick();
+  const stageId = require("../src/restore-job").stageId(parent.fileId);
+  const stage = await c.db.collection("uploads").findOne({ _id: stageId });
+  assert.equal(stage.status, "finalizing");
+  assert.equal(stage.offset, original.length);
+  assert.equal(
+    (
+      await c.request("/api/uploads", "POST", {
+        name: stage.name,
+        size: stage.size,
+        fingerprint: hash(original),
+        resumeId: stageId,
+        purpose: "compress",
+        compression: "adaptive",
+      })
+    ).status,
+    400,
+  );
+  assert.equal((await c.request(`/api/uploads/${stageId}`)).status, 404);
+  const listed = await (await c.request("/api/uploads")).json();
+  assert.equal(
+    listed.uploads.some((row) => row.uploadId === stageId),
+    false,
+  );
+  assert.ok(
+    (await c.request(`/api/uploads/${stageId}/complete`, "POST", {})).status >=
+      400,
+  );
+  assert.ok(
+    (
+      await c.request(`/api/uploads/${stageId}/chunks`, "PUT", original, {
+        "Content-Type": "application/octet-stream",
+        "Upload-Offset": "0",
+        "X-Chunk-SHA256": hash(original),
+      })
+    ).status >= 400,
+  );
+  assert.equal(
+    (await c.request(`/api/uploads/${stageId}`, "DELETE")).status,
+    404,
+  );
+  assert.equal(
+    (await c.db.collection("uploads").findOne({ _id: stageId })).status,
+    "finalizing",
+  );
+  assert.equal(
+    await c.db.collection("transfers").countDocuments({ _id: stageId }),
+    0,
+  );
+  c.running.worker.scanner.scanStream = scan;
+  await c.db
+    .collection("transfers")
+    .updateOne({ _id: parent.fileId }, { $unset: { scanRetryAt: "" } });
+  await c.running.worker.tick();
+  assert.equal(
+    (await c.db.collection("transfers").findOne({ _id: stageId })).status,
+    "active",
+  );
+  assert.deepEqual(
+    Buffer.from(
+      await (await c.request(`/api/file/${stageId}/download`)).arrayBuffer(),
+    ),
+    original,
+  );
+});
+
+test("an authorized recipient retains the sender's standard gzip export selection", async (t) => {
+  const c = await setup(t),
+    recipient = "recipient@example.com",
+    token = crypto.randomBytes(32).toString("hex");
+  await c.db
+    .collection("sessions")
+    .insertOne({
+      _id: hash(token),
+      email: recipient,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+  const org = await c.running.pilot.personal(recipient),
+    original = Buffer.from("Portable recipient data.\n".repeat(200));
+  const file = await c.upload(original, { recipient, exportFormat: "gzip" });
+  await c.running.worker.tick();
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "X-Organization-ID": org._id,
+  };
+  const info = await (
+    await c.request(
+      `/api/file/${file.fileId}/compression`,
+      "GET",
+      undefined,
+      headers,
+    )
+  ).json();
+  assert.equal(info.exportFormat, "gzip");
+  assert.deepEqual(
+    zlib.gunzipSync(
+      Buffer.from(
+        await (
+          await c.request(
+            `/api/file/${file.fileId}/export/${info.exportFormat}`,
+            "GET",
+            undefined,
+            headers,
+          )
+        ).arrayBuffer(),
+      ),
+    ),
+    original,
   );
 });

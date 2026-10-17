@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { gunzipSync } = require("node:zlib");
 const base = process.env.BROWSER_APP_URL || "http://127.0.0.1:3081",
   inbox = process.env.BROWSER_MAIL_URL || "http://127.0.0.1:8025";
 async function main() {
@@ -173,11 +174,71 @@ async function main() {
     assert.deepEqual(await fs.readFile(await restored.path()), original);
     await inspect("restored");
     await page.locator("#compression-done").click();
+    await page.locator("#new-compression").click();
+    await page.locator('[data-compression-action="send"]').click();
+    await page.locator("#compression-next").click();
+    const image = Buffer.from("89504e470d0a1a0a", "hex");
+    await page.locator("#compression-file").setInputFiles({
+      name: "signature.png",
+      mimeType: "image/png",
+      buffer: image,
+    });
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#compression-detection")
+        .textContent.includes("differs from your selected category"),
+    );
+    await page.locator("#compression-next").click();
+    await page.locator("#compression-format").selectOption("gzip");
+    await page
+      .locator("#compression-recipient")
+      .fill(`recipient-${marker}@example.com`);
+    await inspect("send-options");
+    await page.locator("#compression-next").click();
+    await page.locator("#compression-submit").click();
+    await page
+      .locator("#compression-result")
+      .waitFor({ state: "visible", timeout: 60000 });
+    assert.equal(await page.locator("#compression-share").isVisible(), true);
+    assert.match(
+      await page.locator("#compression-share-link").inputValue(),
+      /\?transfer=/,
+    );
+    const gzipDownload = page.waitForEvent("download");
+    await page.locator("#compression-download").click();
+    const gzipFile = await gzipDownload;
+    assert.deepEqual(
+      gunzipSync(await fs.readFile(await gzipFile.path())),
+      image,
+    );
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#compression-savings")
+        .textContent.includes("75% target not met"),
+    );
+    await inspect("send-result");
+    await page.locator("#compression-done").click();
+    await page
+      .getByRole("button", {
+        name: "Compression details: signature.png",
+        exact: true,
+      })
+      .click();
+    await page.locator("#compression-result").waitFor({ state: "visible" });
+    const reopenedDownload = page.waitForEvent("download");
+    await page.locator("#compression-download").click();
+    const reopened = await reopenedDownload;
+    assert.ok(reopened.suggestedFilename().endsWith(".gz"));
+    assert.deepEqual(
+      gunzipSync(await fs.readFile(await reopened.path())),
+      image,
+    );
+    await page.locator("#compression-done").click();
     await page.locator("#search").fill("records");
     assert.equal(await page.locator("#files-loading").isVisible(), false);
     assert.deepEqual(errors, []);
     console.log(
-      "Compression categories, compact screens, actual compressed download and inspected restore passed.",
+      "Compression categories, compact screens, actual compressed download/send, target misses and inspected restore passed.",
     );
   } finally {
     await browser.close();

@@ -1,6 +1,6 @@
 # Industry Compression Implementation Plan
 
-Status: revised design/plan approved on 2026-10-17. Native implementation complete for core workflows; performance comparisons and accessibility verification are recorded with explicit target misses. Final release checks and independent review are in progress. PR #8 remains unmerged.
+Status: revised design/plan approved on 2026-10-17. Native implementation complete for core workflows; performance comparisons and accessibility verification are recorded with explicit target misses. Independent review and its three regression-tested fixes are complete. Final CI handoff and the separate owner merge decision remain pending. PR #8 remains unmerged.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans (native execution recommended) or superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
@@ -143,7 +143,7 @@ The pure byte-prediction/packing core lives in `public/stc-codec-core.js` and co
 
 ### Task 8: Full verification, review and PR handoff
 
-- [ ] Run `npm run check`, `npm run check:secrets`, `npm test`, all real MongoDB/Garage integration files, UI/race/new compression browser suites and production dependency audit. Keep MongoDB's existing 64000 open-file limit.
-- [ ] Build packaged images and verify ClamAV clean/EICAR, Mailpit sends, native originals/exports and restores with both filesystem and S3; verify encrypted backup/restore, migration and key rotation preserve all new codecs and job metadata. Leave the healthy local S3 stack running.
-- [ ] Complete the execution method's required independent branch review, resolve concrete findings and rerun affected checks. Push commits and update the draft PR around final behavior and actual evidence.
+- [x] Run `npm run check`, `npm run check:secrets`, `npm test`, all real MongoDB/Garage integration files, UI/race/new compression browser suites and production dependency audit. Keep MongoDB's existing 64000 open-file limit.
+- [x] Build packaged images and verify ClamAV clean/EICAR, Mailpit sends, native originals/exports and restores with both filesystem and S3; verify encrypted backup/restore, migration and key rotation preserve all new codecs and job metadata. Leave the healthy local S3 stack running.
+- [x] Complete the execution method's required independent branch review, resolve concrete findings and rerun affected checks. Push commits and update the draft PR around final behavior and actual evidence.
 - [ ] Wait for CI at the exact PR head. Report 75%-target pass/miss counts by category, custom codec wins/losses, actual upload/download speed changes and external validation limits. Unmet reduction/speed targets remain unresolved findings; a useful workflow alone does not satisfy them. Ask the owner whether to merge this PR; do not merge without new approval. Tag v0.6.0 only once final release scope and reviewed commit are settled.

@@ -61,6 +61,11 @@ const compressionUI = (() => {
     $("compression-result").hidden = true;
     $("compression-working").hidden = true;
     $("compression-navigation").hidden = false;
+    const saved = Boolean(resumeId || jobId);
+    $("compression-back").disabled = saved;
+    for (const input of $("compression-form").querySelectorAll("input,select"))
+      input.disabled =
+        saved && (input.id !== "compression-file" || Boolean(jobId));
     for (const pane of dialog().querySelectorAll("[data-compression-step]"))
       pane.hidden = Number(pane.dataset.compressionStep) !== next;
     const labels =
@@ -269,6 +274,8 @@ const compressionUI = (() => {
         return showResult(await info(jobId), run);
       }
     }
+    $("compression-format").value =
+      file.exportFormat === "gzip" ? "gzip" : "stc";
     metrics(file);
     $("compression-form").hidden = true;
     $("compression-actions").hidden = true;
@@ -392,8 +399,11 @@ const compressionUI = (() => {
         screen(3);
         formError(
           "compression-error",
-          error.message ||
-            "The job paused. Retry with the same unmodified original.",
+          (error.message ||
+            "The job paused. Retry with the same unmodified original.") +
+            (resumeId || jobId
+              ? " This saved job keeps its original settings. Retry here, or close and start a new job to change them."
+              : ""),
         );
       }
     } finally {
