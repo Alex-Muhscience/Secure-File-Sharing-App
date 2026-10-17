@@ -22,9 +22,12 @@
     />
     <link rel="stylesheet" href="/tokens.css" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/compression.css" />
     <script src="/dashboards.js" defer></script>
     <script src="/billing-ui.js" defer></script>
+    <script src="/upload-compression.js" defer></script>
     <script src="/resumable.js" defer></script>
+    <script src="/compression-ui.js" defer></script>
     <script src="/script.js" defer></script>
   </head>
   <body>
@@ -332,16 +335,26 @@
                     Share files. Manage access. Keep things moving.
                   </p>
                 </div>
-                <button
-                  id="new-transfer"
-                  class="button button-primary"
-                  type="button"
-                >
-                  <svg class="icon" aria-hidden="true">
-                    <use href="/icons.svg#plus"></use>
-                  </svg>
-                  Send a file
-                </button>
+                <div class="transfer-heading-actions">
+                  <button
+                    id="new-compression"
+                    class="button button-secondary"
+                    type="button"
+                  >
+                    <svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#archive"></use></svg
+                    >Compress a file</button
+                  ><button
+                    id="new-transfer"
+                    class="button button-primary"
+                    type="button"
+                  >
+                    <svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#plus"></use>
+                    </svg>
+                    Send a file
+                  </button>
+                </div>
               </div>
               <p id="workspace-notice" class="notice" hidden></p>
               <details
@@ -778,6 +791,329 @@
         </div>
       </section>
     </main>
+
+    <dialog
+      id="compression-dialog"
+      class="dialog compression-dialog"
+      aria-labelledby="compression-title"
+    >
+      <div class="dialog-top">
+        <span class="dialog-symbol"
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#archive"></use></svg></span
+        ><button
+          type="button"
+          class="icon-button dialog-close"
+          aria-label="Close compression dialog"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#close"></use>
+          </svg>
+        </button>
+      </div>
+      <p class="compression-eyebrow">Secure Transfer · Compression</p>
+      <ol
+        id="compression-steps"
+        class="send-steps"
+        aria-label="Compression progress"
+        hidden
+      ></ol>
+      <h2 id="compression-title" tabindex="-1">What would you like to do?</h2>
+      <p id="compression-description" class="dialog-description">
+        Keep every original byte. Choose where your file goes next.
+      </p>
+      <div id="compression-actions" class="compression-actions">
+        <button
+          type="button"
+          class="compression-action"
+          data-compression-action="download"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#download"></use></svg
+          ><span
+            ><strong>Compress and download</strong
+            ><small>Save a smaller archive to your device.</small></span
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#arrow"></use>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="compression-action"
+          data-compression-action="send"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#link"></use></svg
+          ><span
+            ><strong>Compress and send</strong
+            ><small>Share with an email-verified recipient.</small></span
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#arrow"></use>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="compression-action"
+          data-compression-action="restore"
+        >
+          <svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#refresh"></use></svg
+          ><span
+            ><strong>Restore an archive</strong
+            ><small>Recover the exact original from a .stc file.</small></span
+          ><svg class="icon" aria-hidden="true">
+            <use href="/icons.svg#arrow"></use>
+          </svg>
+        </button>
+      </div>
+      <form id="compression-form" novalidate hidden>
+        <section data-compression-step="0">
+          <div class="field">
+            <label for="compression-industry">Your field of work</label
+            ><select id="compression-industry">
+              <option value="business">General business</option>
+              <option value="finance">Finance &amp; legal</option>
+              <option value="research">Healthcare &amp; research</option>
+              <option value="engineering">Engineering &amp; data</option>
+              <option value="creative">Creative &amp; media</option>
+              <option value="education">Education</option>
+            </select>
+          </div>
+          <fieldset class="compression-types">
+            <legend>What kind of file?</legend>
+            <label
+              ><input
+                type="radio"
+                name="compression-category"
+                value="documents"
+                checked
+              /><span
+                ><strong>Documents &amp; Office</strong
+                ><small>PDF, DOCX, XLSX, TXT</small></span
+              ></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="compression-category"
+                value="data"
+              /><span
+                ><strong>Structured data</strong
+                ><small>CSV, JSON, XML, records</small></span
+              ></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="compression-category"
+                value="developer"
+              /><span
+                ><strong>Developer files</strong
+                ><small>Source, logs, scripts</small></span
+              ></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="compression-category"
+                value="images"
+              /><span
+                ><strong>Images &amp; graphics</strong
+                ><small>JPEG, PNG, SVG, RAW</small></span
+              ></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="compression-category"
+                value="media"
+              /><span
+                ><strong>Audio &amp; video</strong
+                ><small>WAV, MP3, MP4, MOV</small></span
+              ></label
+            >
+            <label
+              ><input
+                type="radio"
+                name="compression-category"
+                value="archives"
+              /><span
+                ><strong>Archives &amp; other</strong
+                ><small>ZIP, backups, binary files</small></span
+              ></label
+            >
+          </fieldset>
+          <p id="compression-guidance" class="field-hint">
+            Documents stay byte-for-byte intact, including signatures and
+            formatting.
+          </p>
+        </section>
+        <section data-compression-step="1" hidden>
+          <div class="field">
+            <label for="compression-file">Choose your file</label
+            ><input
+              id="compression-file"
+              type="file"
+              required
+              aria-describedby="compression-file-hint"
+            />
+          </div>
+          <p id="compression-file-hint" class="field-hint">
+            The current upload limit applies.
+          </p>
+          <p id="compression-selection" class="notice" hidden></p>
+          <p id="compression-detection" class="field-hint" role="status"></p>
+        </section>
+        <section data-compression-step="2" hidden>
+          <div class="field">
+            <label for="compression-mode">Compression preference</label
+            ><select id="compression-mode">
+              <option value="adaptive">Fast transfer</option>
+              <option value="smallest">Smallest archive · takes longer</option>
+              <option value="research">
+                Compare our custom engine · experimental
+              </option>
+              <option value="none">
+                Original bytes · no storage compression
+              </option>
+            </select>
+            <p class="field-hint">
+              The custom engine is compared with Brotli and Zstandard. Your file
+              chooses the measured result.
+            </p>
+          </div>
+          <div class="field">
+            <label for="compression-format">Download format</label
+            ><select id="compression-format">
+              <option value="stc">Secure Transfer archive (.stc)</option>
+              <option value="gzip">Standard gzip (.gz)</option>
+            </select>
+            <p class="field-hint">
+              .stc supports our engines and an exact restore tool. Gzip works
+              with standard archive tools. Exported archives are not encrypted.
+            </p>
+          </div>
+          <div id="compression-recipient-fields" class="field" hidden>
+            <label for="compression-recipient">Recipient’s email address</label
+            ><input
+              id="compression-recipient"
+              type="email"
+              autocomplete="off"
+              placeholder="recipient@company.com"
+            />
+          </div>
+          <div class="field">
+            <label for="compression-expiry">Keep access open for</label
+            ><select id="compression-expiry">
+              <option value="1">1 hour</option>
+              <option value="24" selected>24 hours</option>
+              <option value="72">3 days</option>
+              <option value="168">7 days</option>
+            </select>
+          </div>
+        </section>
+        <section data-compression-step="3" hidden>
+          <dl id="compression-review" class="review-details"></dl>
+          <p class="field-hint">
+            We aim for 75% reduction on compressible files. Results vary;
+            already compressed or encrypted files may not shrink. Every original
+            byte is preserved.
+          </p>
+          <p class="field-hint">
+            Files use server-managed encryption and must pass inspection before
+            download.
+          </p>
+        </section>
+        <div id="compression-working" class="upload-feedback" hidden>
+          <p id="compression-status" role="status" aria-live="polite">
+            Preparing your file…
+          </p>
+          <progress
+            id="compression-progress"
+            max="100"
+            value="0"
+            aria-label="Compression upload progress"
+          ></progress
+          ><button id="compression-pause" type="button" class="text-button">
+            Pause and close
+          </button>
+        </div>
+        <p
+          id="compression-error"
+          class="form-error"
+          role="alert"
+          tabindex="-1"
+          hidden
+        ></p>
+        <div id="compression-navigation" class="dialog-footer">
+          <button
+            id="compression-back"
+            type="button"
+            class="button button-secondary"
+          >
+            Back</button
+          ><button
+            id="compression-next"
+            type="button"
+            class="button button-primary"
+          >
+            Continue</button
+          ><button
+            id="compression-submit"
+            type="submit"
+            class="button button-primary"
+            hidden
+          >
+            Start compression
+          </button>
+        </div>
+      </form>
+      <section id="compression-result" hidden aria-label="Compression result">
+        <p id="compression-result-name" class="compression-result-name"></p>
+        <dl id="compression-metrics" class="review-details"></dl>
+        <p id="compression-savings" class="notice" role="status">
+          Archive size not measured yet.
+        </p>
+        <p id="compression-codecs" class="field-hint"></p>
+        <p id="compression-result-error" class="form-error" role="alert" tabindex="-1" hidden></p>
+        <div id="compression-share" class="field" hidden>
+          <label for="compression-share-link">Recipient link</label
+          ><input id="compression-share-link" readonly /><button
+            id="compression-copy-link"
+            type="button"
+            class="text-button"
+          >
+            Copy link
+          </button>
+        </div>
+        <p id="compression-restore-help" class="field-hint">
+          Restore .stc files using Restore an archive or the offline tool
+          documented in the README. Keep downloaded archives private.
+        </p>
+        <div class="compression-result-actions">
+          <button
+            id="compression-download"
+            type="button"
+            class="button button-primary"
+          >
+            Download archive</button
+          ><button
+            id="compression-original"
+            type="button"
+            class="button button-secondary"
+          >
+            Download original
+          </button>
+        </div>
+        <button
+          id="compression-done"
+          type="button"
+          class="button button-secondary button-wide"
+        >
+          Done
+        </button>
+      </section>
+    </dialog>
 
     <dialog
       id="transfer-dialog"

@@ -1,6 +1,6 @@
 {
   "name": "secure-file-sharing-platform",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Email-verified encrypted file transfers",
   "main": "app.js",
@@ -10,13 +10,13 @@
     "test": "node --test test/*.test.js",
     "test:integration": "node --test --test-timeout=120000 --test-concurrency=2 test/*.cjs",
     "check": "node scripts/check.cjs",
-    "test:browser": "node test/browser.js",
+    "test:browser": "node test/browser.js && node test/compression-browser.js",
     "check:secrets": "node scripts/check-secrets.cjs",
     "test:ui": "node test/ui-browser.js && node test/ui-races.js",
     "format:ui": "prettier --write \"public/*.{html,css,js}\" test/browser.js test/ui-browser.js"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24.19.0 <25"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1151.0",

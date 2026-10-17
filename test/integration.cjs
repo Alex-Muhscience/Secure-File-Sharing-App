@@ -30,9 +30,9 @@ test('Mongo-backed transfer lifecycle, OTP races, authorization, expiry, tamper 
   let base = `http://127.0.0.1:${server.address().port}`;
   const request = (url, token, method = 'GET', body) => fetch(base + url, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body && !(body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}) }, body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined });
   assert.equal((await request('/ready')).status, 200);
-  assert.deepEqual(await (await request('/api/config')).json(), { maxFileSize: 1024, billingSandbox: false, inboxUrl: 'http://localhost:8025', resumable: { enabled: true, chunkSize: 8388608 } });
+  assert.deepEqual(await (await request('/api/config')).json(), { maxFileSize: 1024, billingSandbox: false, inboxUrl: 'http://localhost:8025', resumable: { enabled: true, chunkSize: 8388608, uploadCodecs:['none','gzip','stp1'] } });
   const localBase = config.baseUrl; config.baseUrl = 'https://files.example.com';
-  assert.deepEqual(await (await request('/api/config')).json(), { maxFileSize: 1024, billingSandbox: false, inboxUrl: null, resumable: { enabled: true, chunkSize: 8388608 } });
+  assert.deepEqual(await (await request('/api/config')).json(), { maxFileSize: 1024, billingSandbox: false, inboxUrl: null, resumable: { enabled: true, chunkSize: 8388608, uploadCodecs:['none','gzip','stp1'] } });
   config.baseUrl = localBase;
   for (const address of ['a,b@example.com', 'a(comment)@example.com', 'a@example.com\r\nBcc: victim@example.com']) {
     assert.equal((await request('/api/request-otp', null, 'POST', { email: address })).status, 400);

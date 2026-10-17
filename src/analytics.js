@@ -22,7 +22,7 @@ async function usageAnalytics(db, window, orgId) {
         $match: {
           ...(orgId ? { orgId } : {}),
           at: { $gte: window.start, $lt: window.until },
-          type: { $in: ["upload", "download"] },
+          type: { $in: ["upload", "download", "export"] },
         },
       },
       {
@@ -71,6 +71,8 @@ async function usageAnalytics(db, window, orgId) {
       uploadBytes: 0,
       downloadBytes: 0,
       compressionSavedBytes: 0,
+      exports: 0,
+      exportBytes: 0,
     };
     byDay.set(row.date, row);
     return row;
@@ -78,6 +80,7 @@ async function usageAnalytics(db, window, orgId) {
   for (const row of rows) {
     const day = byDay.get(row._id.day);
     const upload = row._id.type === "upload";
+    if(row._id.type==='export'){day.exports+=row.count;day.exportBytes+=row.bytes;continue;}
     day[upload ? "uploads" : "downloads"] += row.count;
     day[upload ? "uploadBytes" : "downloadBytes"] += row.bytes;
     day.compressionSavedBytes += row.saved;
@@ -88,6 +91,8 @@ async function usageAnalytics(db, window, orgId) {
     uploadBytes: 0,
     downloadBytes: 0,
     compressionSavedBytes: 0,
+    exports:0,
+    exportBytes:0,
   };
   for (const day of series)
     for (const key of Object.keys(totals)) totals[key] += day[key];

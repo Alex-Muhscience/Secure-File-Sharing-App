@@ -84,6 +84,9 @@ restore/
 # Browser artifacts can contain recipient details
 playwright-report/
 test-results/
+downloads/
+exports/
+benchmark-input/
 .hallmark/
 
 # Track only empty directory markers used to seed the Garage volume

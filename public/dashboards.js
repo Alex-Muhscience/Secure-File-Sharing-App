@@ -57,9 +57,14 @@ const enterprise = (() => {
         `${data.totals.uploads.toLocaleString()} transfers`,
       ),
       metric(
-        "Downloaded",
+        "Original downloads",
         bytes(data.totals.downloadBytes),
         `${data.totals.downloads.toLocaleString()} download requests`,
+      ),
+      metric(
+        "Archive exports",
+        bytes(data.totals.exportBytes || 0),
+        `${(data.totals.exports || 0).toLocaleString()} completed streams`,
       ),
       metric(
         "Compression saved",
@@ -77,7 +82,7 @@ const enterprise = (() => {
         `Last ${data.days} days · UTC · Download figures count authorized requests.`,
       ),
     );
-    if (!data.totals.uploads && !data.totals.downloads)
+    if (!data.totals.uploads && !data.totals.downloads && !data.totals.exports)
       section.append(
         node("p", "dashboard-empty", "No transfer activity in this period."),
       );

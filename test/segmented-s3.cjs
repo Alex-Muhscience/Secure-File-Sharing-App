@@ -35,11 +35,14 @@ test('segmented files migrate, rotate keys, and recover to filesystem and privat
     await client.close(); await fs.rm(directory, { recursive: true, force: true });
   });
   await initialize(db); await storage.init(); await remote.init(); storage.attach(db);
-  const chunkSize = 8 * 1024 * 1024, parts = [crypto.randomBytes(chunkSize), Buffer.alloc(chunkSize, 65), crypto.randomBytes(2 * 1024 * 1024)];
+  const chunkSize = 8 * 1024 * 1024, bits=crypto.randomBytes(chunkSize/8),walk=Buffer.alloc(chunkSize);let value=0;
+  for(let i=0;i<walk.length;i++){value=(value+((bits[i>>3]>>(i&7))&1))&255;walk[i]=value;}
+  const parts = [crypto.randomBytes(chunkSize), walk, crypto.randomBytes(2 * 1024 * 1024),Buffer.alloc(1024*1024,65)];
   const expected = digest(Buffer.concat(parts)), id = crypto.randomUUID(), objectId = crypto.randomUUID();
-  const file = { _id: id, objectId, format: 'segments-v1', storageBackend: 'filesystem', name: 'Archive.bin', owner: 'owner@example.com', recipient: 'recipient@example.com', status: 'active', size: 0, storedSize: 0, chunkSize, chunkCount: 3, createdAt: new Date(), expiresAt: new Date(Date.now() + 86400000), ...storage.wrap(crypto.randomBytes(32), objectId) };
+  const file = { _id: id, objectId, format: 'segments-v1', storageBackend: 'filesystem', name: 'Archive.bin', owner: 'owner@example.com', recipient: 'recipient@example.com', status: 'active', size: 0, storedSize: 0, chunkSize, chunkCount: parts.length, createdAt: new Date(), expiresAt: new Date(Date.now() + 86400000), ...storage.wrap(crypto.randomBytes(32), objectId) };
   for (const [index, bytes] of parts.entries()) {
-    const part = await storage.writePart({ uploadId: id, index, offset: file.size }, bytes, 'auto');
+    const part = await storage.writePart({ uploadId: id, index, offset: file.size }, bytes, index===1?'research':'auto');
+    if(index===1)assert.equal(part.codec,'stp1','Predictive custom bytes survive encrypted storage and recovery');
     await db.collection('chunks').insertOne({ _id: crypto.randomUUID(), ...part });
     file.size += bytes.length; file.storedSize += part.storedSize;
   }
@@ -48,14 +51,14 @@ test('segmented files migrate, rotate keys, and recover to filesystem and privat
   assert.equal(await streamHash(storage, file), expected);
   assert.equal(await migrateStorage({ db, storage, target: 's3' }), 1);
   const migrated = await db.collection('transfers').findOne({ _id: id });
-  assert.equal(await db.collection('chunks').countDocuments({ storageBackend: 's3' }), 3);
+  assert.equal(await db.collection('chunks').countDocuments({ storageBackend: 's3' }), parts.length);
   assert.equal(await streamHash(storage, migrated), expected);
   const rotatedEnv = { ...env, STORAGE_DRIVER: 's3', ENCRYPTION_KEYS: JSON.stringify({ current: '78'.repeat(32) }), ENCRYPTION_KEY_ID: 'current' };
   await execute(process.execPath, [path.join(__dirname, '../scripts/rotate-keys.cjs')], { env: rotatedEnv });
   const rotatedConfig = loadConfig(rotatedEnv), rotated = new Storage({ ...rotatedConfig, keys: { current: Buffer.from('78'.repeat(32), 'hex') } }); rotated.attach(db);
   const root = await db.collection('transfers').findOne({ _id: id });
   assert.equal(root.keyId, 'current');
-  assert.equal(await db.collection('chunks').countDocuments({ keyId: 'current' }), 3);
+  assert.equal(await db.collection('chunks').countDocuments({ keyId: 'current' }), parts.length);
   assert.equal(await streamHash(rotated, root), expected); rotated.close();
   const archive = path.join(directory, 'backup.enc'), backupScript = path.join(__dirname, '../scripts/backup.cjs');
   await execute(process.execPath, [backupScript, 'create', archive], { env: rotatedEnv });

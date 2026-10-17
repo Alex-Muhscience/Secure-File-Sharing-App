@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const { promisify } = require("node:util");
 const zlib = require("node:zlib");
+const registry = require('./compression');
 const compress = promisify(zlib.brotliCompress),
   decompress = promisify(zlib.brotliDecompress);
 const MAX_PART = 64 * 1024 * 1024;
@@ -16,7 +17,7 @@ function partAAD(file) {
     !Number.isSafeInteger(file.size) ||
     file.size < 1 ||
     file.size > MAX_PART ||
-    !["br", "none"].includes(file.codec) ||
+    !registry.CODECS.includes(file.codec) ||
     !/^[a-f\d-]{36}$/.test(file.uploadId) ||
     !/^[a-f\d]{64}$/.test(file.sha256)
   )
@@ -37,6 +38,7 @@ function partAAD(file) {
 async function encodePart(bytes, mode) {
   if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > MAX_PART)
     throw new Error("Part exceeds size limit");
+  if (['adaptive','smallest','research'].includes(mode)) return registry.encode(bytes,{mode});
   if (!["auto", "maximum", "none"].includes(mode))
     throw new Error("Invalid compression mode");
   if (mode === "maximum") {
@@ -82,10 +84,7 @@ async function encodePart(bytes, mode) {
   return { codec: "none", bytes };
 }
 async function decodePart(bytes, file) {
-  const plain =
-    file.codec === "br"
-      ? await decompress(bytes, { maxOutputLength: file.size })
-      : bytes;
+  const plain = await registry.decode(bytes,file.codec,file.size);
   if (plain.length !== file.size || sha256(plain) !== file.sha256)
     throw new Error("Part integrity verification failed");
   return plain;

@@ -5,6 +5,8 @@ node_modules
 !.env.example
 uploads
 downloads
+exports
+benchmark-input
 logs
 data
 .aws
