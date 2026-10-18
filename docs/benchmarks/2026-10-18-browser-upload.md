@@ -114,4 +114,3 @@ PY
 Compare names, hashes, sizes/codecs and every case's preparation median/range before interpreting a delta. Replaying on another browser/host can change results. Customer inputs/reports stay private; filenames and hashes can identify their contents.
 
 Rollback restores the baseline sampling block and `wireBytes.slice().buffer` from the recorded baseline worker, then reruns `npm run test:ui` and the same comparison. It requires no format, database, storage or configuration migration. The [ratio and end-to-end transfer evidence](2026-10-18-summary.md) remains historical evidence with its original misses; representative files, target devices, real networks and terabyte validation remain in [delivery status](../DELIVERY_STATUS.md).
-
