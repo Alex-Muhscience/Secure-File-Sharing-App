@@ -1,5 +1,7 @@
 # Compression engine and portable formats
 
+Current v0.6.0 codec/container contract and reproduction guide. For readiness/remaining research use [delivery status](DELIVERY_STATUS.md); for module ownership and the distinction between client archives and encrypted backups use [implementation](IMPLEMENTATION.md#formats-and-protection-boundaries). The UI/server restore and offline CLI accept Secure Transfer STC1 archives, not arbitrary ZIP/RAR/gzip extraction. Standard gzip exports use normal gzip tools.
+
 Version v0.6.0 adds lossless compression/download/send/restore workflows. The default pilot still accepts 10 MiB, and full-scale terabyte validation is separate. Use Node 24.19+ in the 24.x line; Node's Zstandard API remains experimental and is isolated behind explicit codec IDs and tests.
 
 ## STP1 custom predictive codec

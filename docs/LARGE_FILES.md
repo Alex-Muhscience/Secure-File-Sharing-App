@@ -1,5 +1,7 @@
 # Large files: configuration, protection and evidence
 
+Current v0.6.0 scale/inspection reference. [Delivery status](DELIVERY_STATUS.md) owns remaining capacity acceptance and [operations](OPERATIONS.md) owns deployment/recovery procedures. TB (decimal) and TiB (binary) are different units; the requested TB scale is a product target, while the TiB number below is the configuration ceiling.
+
 The requested product target is 1–5 TB per file. The implementation provides bounded encrypted chunks and streaming operations, with a configuration ceiling of 5 TiB (5,497,558,138,880 bytes). A configurable limit is not a completed infrastructure validation. The default local pilot accepts 10 MiB; the supplied ClamAV stream limit is 25 MiB.
 
 ## Upload, compression and encryption

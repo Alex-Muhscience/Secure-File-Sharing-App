@@ -1,5 +1,15 @@
 # Local pilot operations
 
+Runbook for the v0.6.0 local application. [README](../README.md) introduces the product, [implementation](IMPLEMENTATION.md) maps the runtime/API, and [delivery status](DELIVERY_STATUS.md) owns readiness and remaining work. The procedures below are operator actions to choose deliberately, not a claim that production infrastructure is provisioned.
+
+## Choose the correct stack
+
+For a new filesystem installation, use `compose.app.yaml`. For private S3, use both `compose.app.yaml` and `compose.s3.yaml` with ignored `.env.s3`. This existing development workspace uses the S3 overlay and `http://secure-transfer.localhost:3081`; a new clone defaults to filesystem storage and `http://localhost:3081`. Both capture email locally at port 8025.
+
+Before updating an existing installation, identify its current stack and take a backup with that stack. Preserve `.env.local`, `.env.s3`, the Garage configuration, retained encryption/backup keys and named volumes. Initializers preserve existing credentials; they do not provision real email, payment accounts, production keys or an administrator automatically. Keep S3 configured while any live or retained object references need it. Do not switch to the base stack merely because a README example uses filesystem storage.
+
+`compose.local.yaml` is only the separate preview at port 3080. The root `docker-compose.yml` is a legacy template and is not compatible with the current setup instructions. `Deployment.yaml` is an incomplete application-only template, not a turnkey production deployment.
+
 ## Health and recovery
 
 `/health` checks the process; `/ready` checks database and storage. Workspace administrators can call `/api/operations` with the bearer token and `X-Organization-ID` to see scan/deletion counts, notification backlog and recent worker heartbeat. Inspect `docker compose --env-file /dev/null -f compose.app.yaml logs --tail=100 app worker scanner`. Scan failures keep files quarantined; notification and scan jobs carry leases and exponential retries. Deletion tombstones persist until object deletion succeeds. Quota reservations are embedded in organization records and reconciled after one hour if they have no live transfer or active/finalizing/cancelling upload.
@@ -87,3 +97,46 @@ Use Node 24.19+ in the 24.x line. New `stp1`/`zstd` part codec IDs are authentic
 Private compression jobs omit recipients and notifications. Restore jobs reserve both the archive's logical bytes and the reconstructed original. Encrypted staging parts and their lease/checkpoint survive scanner outages; only a verified inspected child is published. Cancellation marks staged work for cleanup and releases its reservation. Invalid archives are blocked; scanner/infrastructure errors stay quarantined for retry. Inspect job status through `/api/file/:id/compression`; do not bypass inspection by changing statuses manually.
 
 Original download analytics and complete archive-export body bytes are separate. Upload payload counters cover received file-chunk bodies, including parsed retries, not TLS/API overhead or billing quotas. Native grants are scoped to a file/representation and revoked on explicit logout. Original ranges still resume; generated exports restart after interruption. `.stc` and `.gz` exports contain plaintext compressed data, never server keys, and are not encrypted archives. See [compression operations and offline output limits](COMPRESSION.md).
+
+## Verification
+
+These commands verify code/configuration; they do not close the external gates in [delivery status](DELIVERY_STATUS.md). The canonical automated sequence is [the CI workflow](../.github/workflows/node.js.yml). Test counts recorded in release reviews are historical evidence, not a substitute for running checks on changed code.
+
+For local source/UI checks:
+
+```bash
+npm ci --ignore-scripts
+npm run check
+npm run check:secrets
+npm test
+npx playwright install chromium
+npm run test:ui
+```
+
+On Linux, Chromium also needs its system dependencies; the CI runner uses `npx playwright install --with-deps chromium`. The UI/race suites use controlled API fixtures. Packaged browser tests need the real app, scanner, database and Mailpit running.
+
+Rebuild application/worker images after changing server source, so a container test does not accidentally exercise an old image. With the filesystem stack running, use its private MongoDB rather than assuming a host port exists:
+
+```bash
+docker compose --env-file /dev/null -f compose.app.yaml run --rm --no-deps --user root \
+  -v "$PWD/test:/app/test:ro" -e TEST_MONGO_URI=mongodb://mongo:27017 app npm run test:integration
+docker compose --env-file /dev/null -f compose.app.yaml exec -T app node < scripts/smoke.cjs
+BROWSER_STORAGE=filesystem npm run test:browser
+```
+
+With the S3 overlay already running:
+
+```bash
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml run --rm --no-deps --user root \
+  -v "$PWD/test:/app/test:ro" -e TEST_MONGO_URI=mongodb://mongo:27017 \
+  -e TEST_S3=true -e TEST_COMPRESSION_STORAGE=s3 app npm run test:integration
+docker compose --env-file .env.s3 -f compose.app.yaml -f compose.s3.yaml exec -T app node < scripts/smoke.cjs
+BROWSER_STORAGE=s3 npm run test:browser
+bash scripts/backup-local.sh s3
+```
+
+The integration suites use isolated temporary databases/object prefixes and clean up only their test resources. `TEST_S3=true` enables real Garage adapter/migration/recovery cases; `TEST_COMPRESSION_STORAGE=s3` additionally runs private compression/restore integration cases through S3. Host-side integration is possible with `TEST_MONGO_URI` pointing to a separately provisioned test database; Compose MongoDB intentionally has no host port. Use a disposable local pilot for smoke/browser workflows, which create identities, workspaces and transfers through the real app. Browser output under `test-results/` is ignored.
+
+The smoke script checks real local email, ClamAV clean/EICAR inspection, byte-exact recipient download and revocation. `test:browser` runs both the existing client workflows and compression/download/send/restore coverage. Backup/migration/key-rotation correctness is exercised in integration; an actual production restore drill and offsite policy are separate operator acceptance work.
+
+For a documentation-only change, check Markdown links/anchors, cited source paths, configuration/command accuracy, whitespace and tracked secrets. Do not restart the pilot, change its keys or claim new runtime test evidence solely because prose changed. Repository CI still runs its configured checks when the documentation PR is opened.

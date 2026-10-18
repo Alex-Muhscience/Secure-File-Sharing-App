@@ -1,5 +1,7 @@
 # Enterprise Workspace Implementation Plan
 
+> **Historical v0.5.0 implementation plan.** The enterprise foundation/corrections landed through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6) and [PR #7](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/7). Original execution instructions and checklists below are retained for traceability. Use [current delivery status](../../DELIVERY_STATUS.md), [implementation map/history](../../IMPLEMENTATION.md) and the [release review](../../RELEASE_REVIEW.md) for current interpretation; this is not the live backlog or a request to repeat completed work.
+
 > Execution: continue natively in this session under the user's existing instruction to build through completion. Use the executing-plans workflow task by task. Preserve the draft PR workflow and ask before merging to main.
 
 **Goal:** Deliver a compact navy/scarlet/white client experience, platform administration, tenant analytics/billing, and verified streaming compression/encryption for large files.

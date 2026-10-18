@@ -1,41 +1,45 @@
-# Secure Transfer interface
+# Secure Transfer interface reference
 
-Release target: v0.5.0. The user requested a navy blue, scarlet red and white interface that works for clients with varied technical experience. This design covers client workflows and the enterprise administration extension of the existing application. Production infrastructure and commercial acceptance remain separate release gates.
+Current implementation: **v0.6.0**, reconciled on **2026-10-18**. This describes the client/operator experience already built, including the enterprise screens and compression upgrade. It is not a second roadmap. [Delivery status](docs/DELIVERY_STATUS.md) owns remaining work; [implementation](docs/IMPLEMENTATION.md) maps the source/API.
 
-## Design system
+## Design system and navigation
 
-Modern, restrained product workspace. Navy provides navigation and hierarchy; white provides readable working surfaces; scarlet identifies the main send action and selected accents. Status labels always include words and icons, rather than relying on color. One consistent system covers sign-in, transfers, dialogs and workspace settings.
+Navy establishes navigation and hierarchy, white provides readable working surfaces, and scarlet marks primary actions and selected accents. Status labels include words rather than relying only on color. Current tokens are in [public/tokens.css](public/tokens.css); shared styles/icons and locally hosted Instrument Sans/Bricolage Grotesque assets live under `public/` with their font licenses.
 
-The app uses a workspace layout: persistent navigation on desktop, compact navigation on mobile, a functional page heading, a quiet usage summary and a searchable transfer list. Sign-in uses a split composition with a simple email form and a navy brand panel. The main app prioritizes real content over decoration.
+Desktop uses persistent workspace navigation; narrow layouts use compact navigation. The main experience separates Transfers, Analytics, Billing and Workspace settings. Explicit platform operators receive a separate Platform area with Clients and Analytics views. Permission checks happen on the server; hiding a control is not an authorization boundary.
 
-Typography: locally hosted Instrument Sans regular/bold for body and controls; Bricolage Grotesque bold for the wordmark and introductory headings. OFL licenses accompany the fonts. No external font requests. The baseline is 16px, with 14px supporting labels and tabular numerals for file sizes and usage.
+The interface aims for visible keyboard focus, contained/restored dialog focus, readable labels, touch-sized controls, reduced-motion support and reflow. Automated axe/keyboard/200%-text checks provide evidence for tested screens, not complete human accessibility or every-browser acceptance.
 
-Color, spacing, type, radius and motion tokens live in `public/tokens.css`. Default surfaces are white and cool off-white; text and focus rings are navy. Primary scarlet must maintain at least 4.5:1 text contrast with white. Controls have visible focus rings and 44px touch targets. No decorative page-load animation; brief press feedback and dialog entry respect reduced motion.
+## Client tasks and screens
 
-## Information architecture
+| Task | Screen sequence | Completion behavior |
+| --- | --- | --- |
+| Sign in | Email → Verification code | Preserve errors/input, support paste/autocomplete and change-email; local inbox link appears only for configured local capture |
+| Quick send | File → Recipient → Access → Review → Result | Scan before availability, expose recipient link and exact original download |
+| Compress and download | Action → File type/industry → File → Options → Review → Result | No recipient; choose STC/gzip or exact original after inspection |
+| Compress and send | Action → File type/industry → File → Options/recipient → Review → Result | Persist format/recipient, then show a verified-access link; email contains a link, not an attachment |
+| Restore | Action → STC archive → Review → Result | Validate/reconstruct, reserve output space and inspect the original before download |
+| Choose billing | Plan/renewal → Terms and consent → Provider/status | Show only configured prices/providers; no fabricated charges or successful-payment state |
 
-- Sign-in: email, verification code, change-email action, delivery feedback and local inbox link only when local mail capture is configured. Support paste and one-time-code autocomplete.
-- Transfers: current workspace, clear send action, real usage/counts, All/Sent/Received filters, search and status filter. File rows show name, size, sender/recipient, readable status, expiry and permitted actions.
-- Send dialog: one screen at a time, File → Recipient → Access → Review → Result. Include optional drag/drop, lossless compression choice, actual chunk progress, pause/resume and a recipient link with scan explanation. Back preserves input.
-- Analytics: separate owner/admin screen with real 7/30/90-day UTC totals, accessible upload/download chart and expandable paginated daily data.
-- Billing: separate owner/admin screen with actual subscription/limits, payment history and configured/off provider states. Owners choose plan/renewal then review terms and consent on separate compact screens. Stripe may recur or be prepaid; M-Pesa/crypto are prepaid. Prices/currency/credentials remain unconfigured.
-- Platform: explicit server allowlist only, hidden from ordinary workspace owners. Separate Clients and Analytics views avoid placing client management below the full chart. Search/paginate clients, review aggregate usage, edit guarded manual subscriptions or separately pause/reactivate access with a reason. Do not expose file plaintext or imply that access suspension cancels charges.
-- Workspace settings: current members, explained roles, add/update/remove access, activity export and a clearly labeled billing simulator when enabled. Team creation is a dedicated dialog.
-- Help: a short explanation of sending, checking and receiving files, plus the server-managed encryption boundary.
-- Revocation/member removal: explicit confirmation explains the immediate access loss. These actions cannot offer a reliable Undo with the existing API.
+File categories are documents/office files, structured data, developer files, images, audio/video and archives/other. Industry guidance covers general business, finance/legal, healthcare/research, engineering/data, creative/media and education. The labels do not change file bytes, perform lossy conversion or establish certification. A detected magic-header mismatch warns the user; it does not bypass decoder, quota or scanner policy.
 
-## Interaction requirements
+Compression choices are Fast transfer, Smallest archive, custom-engine comparison and original storage. Custom comparison evaluates STP1 alongside established codecs. Selection is not a promise of a particular ratio or speed. The result distinguishes original size, encrypted storage, received upload payload and measured complete archive size. The 75% target is met/not met/not measured; empty originals have no percentage. Downloaded archives are unencrypted, which the interface explains.
 
-Every action has an accessible name and visible feedback. Forms preserve input on failure and show errors near the affected task. Dialogs contain focus, support Escape and restore focus. Expired sessions clear private state and invite sign-in again. Requests started in another workspace/session cannot render into the current workspace. Polling does not repeatedly rebuild unchanged rows or steal keyboard focus. A failed refresh keeps the last usable data visible with a retry action.
+Back preserves entries **before** saving a session. After a job is saved, its action/recipient/settings remain fixed through retries. Polling failure or a lost completion response must continue the same job; users close and start a new job to change it. Pause/resume requires the same unmodified original. Closing or switching workspace/session invalidates stale requests and polling. Reopening a job, including as an authorized recipient, keeps the saved STC/gzip representation.
 
-Use plain language: “Checking file”, “Ready to download”, “Expired”, “Blocked” and “Removed” instead of internal state names. The interface must distinguish empty results, no transfers, loading, service failure and upload failure. Counts describe loaded transfers, not unsupported lifetime analytics. Do not invent users, testimonials, file records or business metrics.
+## Workspaces, reporting and administration
 
-## Implementation boundaries
+- Transfers offers All/Sent/Received filters, search, status, permitted file actions, progress and revocation. Counts describe the loaded data rather than an invented lifetime total.
+- Workspace owners/admins see real 7/30/90-day UTC analytics, storage and separate original-download/archive-export activity. Tables accompany charts; request/range counts do not prove completed receipt.
+- Billing shows actual subscription/limits, order/payment history and provider status. Owners can start configured checkout or use the provider portal. Stripe supports recurring/prepaid; M-Pesa/crypto are prepaid. Live merchant acceptance is outstanding.
+- Workspace settings manages members/roles and activity export. The local billing simulator is labeled separately; it cannot override paid/provider or operator-suspension state.
+- Platform access requires the exact server-side email allowlist plus verification. Clients/Analytics are separate views. Operators inspect metadata/aggregate usage, change guarded manual plans or independently suspend access with a reason. This dashboard does not expose file plaintext. Suspending access does not cancel provider charges.
+- Help explains transfer inspection, recipients, server-managed storage encryption and limits using plain language.
 
-Retain the Express/MongoDB API, authorization rules, in-memory app sessions, scanning worker and storage adapters. Native download capabilities use a separate file-scoped HttpOnly cookie until file expiry, with explicit logout revocation, to support long resumable downloads. Expose only safe client configuration and tenant-scoped dashboard projections; platform routes require verified allowlisted identities. Add focused dashboard/payment/resumable modules and keep payment credentials server-side. Preserve the CSP; serve assets locally. No new production UI framework is required.
+## Failure, confirmation and validation behavior
 
-Modify the existing HTML/CSS/JavaScript in place; add reusable tokens, icons and font assets. Preserve all existing transfer and workspace capabilities. Leave the user's uncommitted skill-installation files untouched. Work on a feature branch and publish a PR; ask before merging to main. Commit messages have no assistant attribution.
+Use “Checking file”, “Ready to download”, “Expired”, “Blocked” and “Removed” rather than internal state names. Distinguish empty results, loading, service failure, upload failure and quarantine. Keep usable content on failed refresh and provide retry feedback near the task. A clean scan is not a guarantee that a file is harmless.
 
-## Acceptance evidence
+Dialogs support keyboard use and restore focus. Explicit revocation/member removal explains immediate access loss. Session expiry clears private app state and prompts sign-in. A file-only native grant can outlive app-session expiry for resumable downloads, but explicit logout and current access checks revoke it. Failed actions from an old context cannot change a new screen, restore the wrong control or attach an old recipient/job result.
 
-Review real desktop and mobile screenshots at 320, 375, 414, 768 and 1440 CSS pixels. Check long names/email addresses, 200% text scaling, reduced motion and keyboard-only operation. Run automated axe checks without suppressing contrast rules on sign-in, workspace, send dialog and settings. Exercise real sign-in, workspace creation, member roles, clean-file scanning, recipient download, copy/share, search/filter, activity export, cancellation, revocation and sign-out. Repeat the live browser flow for filesystem and S3 storage in CI. Keep screenshots and accessibility reports as ignored local artifacts, and document the result honestly.
+Evidence lives in [UI checks](test/ui-browser.js), [race checks](test/ui-races.js), [packaged browser flows](test/browser.js) and [compression browser flows](test/compression-browser.js). The latter covers all six category choices, Back preservation, format mismatch, compressed download/send, target misses, exact inspected restore and native gzip reopening. Screenshots/reports are ignored local/CI artifacts. Human usability/accessibility and other-browser acceptance remain in [delivery status](docs/DELIVERY_STATUS.md).
