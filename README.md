@@ -72,4 +72,6 @@ The [API reference and authentication lifecycle](docs/IMPLEMENTATION.md#api) liv
 
 Use a branch and pull request, update the document that owns each changed fact, and ask the repository owner before merging. Keep secrets, customer files, generated exports, browser artifacts and local skill installations out of application commits. Commit messages contain no assistant attribution. Documentation-only changes do not establish new product capabilities or require a product version bump.
 
+GitHub automatically deletes source branches after an approved merge. Update and verify local `main`, then remove the corresponding merged local branch as well.
+
 Start with [the verification runbook](docs/OPERATIONS.md#verification). The release workflow checks syntax, tracked secrets, dependencies, unit/integration suites, UI/races, packaged filesystem/S3 flows and encrypted backups. The [main merge checks](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/actions/runs/39072849467) passed for v0.6.0; that evidence does not replace the remaining production and customer acceptance work.
