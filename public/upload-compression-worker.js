@@ -24,17 +24,14 @@ async function prepare({ id, bytes: input, mode, estimatedMbps = 10 }) {
     bytes.length > 128 &&
     typeof CompressionStream === "function"
   ) {
-    const sample =
-      bytes.length > 196608
-        ? new Uint8Array([
-            ...bytes.subarray(0, 65536),
-            ...bytes.subarray(
-              Math.floor(bytes.length / 2) - 32768,
-              Math.floor(bytes.length / 2) + 32768,
-            ),
-            ...bytes.subarray(-65536),
-          ])
-        : bytes;
+    let sample = bytes;
+    if (bytes.length > 196608) {
+      const middle = Math.floor(bytes.length / 2);
+      sample = new Uint8Array(196608);
+      sample.set(bytes.subarray(0, 65536));
+      sample.set(bytes.subarray(middle - 32768, middle + 32768), 65536);
+      sample.set(bytes.subarray(-65536), 131072);
+    }
     const trial = await gzip(sample);
     if (trial.length < sample.length * 0.95) {
       const packed = sample === bytes ? trial : await gzip(bytes);
@@ -65,7 +62,8 @@ async function prepare({ id, bytes: input, mode, estimatedMbps = 10 }) {
     wireBytes = bytes;
     wireCodec = "none";
   }
-  const result = wireBytes.slice().buffer;
+  // Each output owns its full buffer; the caller's input was cloned on entry.
+  const result = wireBytes.buffer;
   postMessage(
     {
       id,

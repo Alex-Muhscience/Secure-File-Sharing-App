@@ -36,7 +36,7 @@ The working app is not the old interface-only preview. It also is not a generic 
 | General corpus result | Best tested settings meet the target on **5/8 nonempty synthetic fixtures**; one empty fixture is N/A |
 | Custom codec result | STP1 meets the target on **0/8** general nonempty fixtures; **86.9637%** reduction on the separate correlated-data probe |
 | Transfer speed | WAN benefits on declared compressible fixtures; tiny-file/concurrent-LAN regressions exceed the 5% gate, so legacy defaults remain |
-| Evidence coverage | Synthetic files, local application-stream shaping and Chromium; no representative customer corpus, browser-CPU benchmark or real internet congestion test |
+| Evidence coverage | Synthetic files, local application-stream shaping and native Chromium worker preparation measurements; no representative customer corpus, target-device/browser acceptance or real internet congestion test |
 | Encryption boundary | Server-managed AES-GCM/keyed manifests for storage; downloaded STC/gzip archives are unencrypted |
 | Live billing | Off by default; no merchant account, commercial price or live settlement has been accepted |
 | Email/admin | New clones use local Mailpit and an empty admin allowlist; this workspace separately enables `admin@secure-transfer.localhost` |
@@ -44,6 +44,8 @@ The working app is not the old interface-only preview. It also is not a generic 
 | Test reliability | Controlled-clock UI checks separate failed/manual retry, automatic recovery, manual expiry and background expiry; these fixture checks do not establish supported-browser or real-client acceptance |
 
 Original logical bytes, encrypted storage bytes, complete archive bytes and transferred HTTP-body bytes are different measurements. Storage savings or the earlier 1 GiB counting-scanner run cannot prove archive reduction, malware inspection throughput or terabyte capacity. Read the [full measurement tables and method](benchmarks/2026-10-18-summary.md), [compression reference](COMPRESSION.md) and [large-file evidence](LARGE_FILES.md).
+
+Browser preparation update (2026-10-18): a [native Chromium benchmark](benchmarks/2026-10-18-browser-upload.md) now measures the actual upload client/worker, with exact-byte transport decoding and rejection of hidden fallback. A bounded three-variant comparison and repeated baseline/candidate pair support fixed typed-array sampling and direct worker-output transfer. Confirmation adaptive medians fell from 94.2 to 81.2 ms (8 MiB text), 55.9 to 34.3 ms (8 MiB random) and 77.5 to 59.5 ms (16 MiB random). All 720 timed samples and 144 warmups retained exact originals and identical wire sizes/codecs. Tiny/raw cases include regressions and overlapping ranges. This closes the absence of a local browser-preparation harness; it does not close priority 1, the end-to-end LAN/tiny-file gate, peak-memory validation or representative client/device/network acceptance. Quick-send defaults remain unchanged.
 
 ## What remains, in priority order
 
@@ -69,6 +71,7 @@ Test-maintenance update (2026-10-18): [documentation PR #9](https://github.com/A
 - Tests cover tenant/platform boundaries, quota races, malformed/oversized archives, custom-codec integrity, immutable retries, internal restore-stage isolation, recipient gzip selection, native revocation, payment ordering, scanner outage/retry and cancellation cleanup. Real custom-coded parts survived S3 migration, key rotation and encrypted recovery to both backends.
 - A fresh branch review found three Important issues; all were reproduced and fixed. No minor findings were deferred. [The release review](RELEASE_V060.md) records the fixes, choices and their costs.
 - [Benchmark summary](benchmarks/2026-10-18-summary.md) links every general-fixture outcome, the specialized custom-codec probe, timing ranges and concurrent/resumed comparisons. No customer success, certification, SLA, production revenue or universal codec superiority is established by these checks.
+- [Browser preparation evidence](benchmarks/2026-10-18-browser-upload.md) adds real Chromium worker timings, three evaluated allocation/copy variants, a confirmation pair and native raw/gzip/STP1 integrity/failure checks. The native checks run in `npm run test:ui`; local unit, syntax, secret and full UI suites pass for this change. These checks do not measure end-to-end transfer speed.
 
 ## Scope and maintenance rules
 

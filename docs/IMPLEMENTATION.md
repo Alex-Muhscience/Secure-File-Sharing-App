@@ -74,8 +74,8 @@ No custom encryption primitive is introduced. [Compression](COMPRESSION.md) owns
 | Scanning, notifications and maintenance | [worker](../src/worker.js), [scanner](../src/scanner.js), [held-scan maintenance test](../test/worker-maintenance.cjs) |
 | Snapshots, backend migration and key rotation | [backup format](../src/archive.js), [backup CLI](../scripts/backup.cjs), [migration](../src/migration.js), [key rotation CLI](../scripts/rotate-keys.cjs), [S3 recovery tests](../test/segmented-s3.cjs) |
 | Browser interface and client workers | [HTML](../public/index.html), [main UI](../public/script.js), [compression UI](../public/compression-ui.js), [resumable client](../public/resumable.js), [upload worker](../public/upload-compression-worker.js), [dashboards](../public/dashboards.js), [billing UI](../public/billing-ui.js) |
-| Design and accessibility | [interface reference](../design.md), [tokens](../public/tokens.css), [styles](../public/styles.css), [UI checks](../test/ui-browser.js), [race checks](../test/ui-races.js), [compression browser flows](../test/compression-browser.js) |
-| Reproducible measurements | [codec harness](../scripts/benchmark-codecs.cjs), [transfer harness](../scripts/benchmark-transfers.cjs), [corpus generator](../scripts/benchmark-corpus.cjs), [published results](benchmarks/2026-10-18-summary.md) |
+| Design and accessibility | [interface reference](../design.md), [tokens](../public/tokens.css), [styles](../public/styles.css), [UI checks](../test/ui-browser.js), [race checks](../test/ui-races.js), [native upload-worker checks](../test/upload-browser.js), [compression browser flows](../test/compression-browser.js) |
+| Reproducible measurements | [codec harness](../scripts/benchmark-codecs.cjs), [transfer harness](../scripts/benchmark-transfers.cjs), [browser preparation harness](../scripts/benchmark-browser.cjs), [corpus generator](../scripts/benchmark-corpus.cjs), [ratio/transfer results](benchmarks/2026-10-18-summary.md), [browser results](benchmarks/2026-10-18-browser-upload.md) |
 
 ## Deployment files and historical artifacts
 
