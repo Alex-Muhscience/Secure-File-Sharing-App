@@ -41,6 +41,7 @@ The working app is not the old interface-only preview. It also is not a generic 
 | Live billing | Off by default; no merchant account, commercial price or live settlement has been accepted |
 | Email/admin | New clones use local Mailpit and an empty admin allowlist; this workspace separately enables `admin@secure-transfer.localhost` |
 | Infrastructure | Single-instance local services; no bundled production redundancy, managed KMS/HSM or immutable external audit service |
+| Test reliability | The existing refresh-retry UI fixture can race the normal five-second background refresh and lose its retry button; deterministic fixture synchronization remains maintenance work |
 
 Original logical bytes, encrypted storage bytes, complete archive bytes and transferred HTTP-body bytes are different measurements. Storage savings or the earlier 1 GiB counting-scanner run cannot prove archive reduction, malware inspection throughput or terabyte capacity. Read the [full measurement tables and method](benchmarks/2026-10-18-summary.md), [compression reference](COMPRESSION.md) and [large-file evidence](LARGE_FILES.md).
 
@@ -59,6 +60,8 @@ These are readiness priorities, not promised delivery dates or accepted customer
 | 7 | Agree additional enterprise contracts | Product + engineering | Decide whether SSO/SCIM, regional residency/redundancy and external immutable audit retention are required; implement and verify the agreed scope |
 
 The 75% and speed acceptance gaps remain open research/engineering work. Merchant configuration and production infrastructure are not substitutes for those gaps. Increasing a configuration number, selecting an industry, enabling a provider flag or passing fixture tests does not close the corresponding acceptance item.
+
+Test-maintenance follow-up: [documentation PR #9](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/9) exposed a refresh-retry fixture race in [ui-browser.js](../test/ui-browser.js). The test enables successful file responses before clicking Retry; normal background recovery can hide the button first. A temporary delayed test copy confirmed that sequence, while the unchanged local UI suite passed. Synchronize the fixture with the actual retry action and retain separate background-recovery coverage. Record CI reruns; a rerun alone does not fix this timing dependency.
 
 ## Evidence already available
 
