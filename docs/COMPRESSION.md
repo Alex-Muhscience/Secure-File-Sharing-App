@@ -22,6 +22,8 @@ Legacy `auto`, `maximum` (Brotli 11) and `none` remain supported. `adaptive` com
 
 The browser worker uses feature-detected gzip and, in research mode, STP1. `X-Chunk-Codec` is `none`, `gzip` or `stp1`; `X-Chunk-Logical-Length`, `Upload-Offset` and `X-Chunk-SHA256` refer to the original bytes. The server bounds both encoded bodies and decoded output, verifies the exact logical size/hash, then applies storage compression/encryption and normal inspection. Quotas never use a caller's compressed size. Old raw requests still work. Browser preparation buffers at most the current and next bounded chunk; durable commits remain sequential.
 
+Browser sampling copies the same leading/middle/trailing 64 KiB regions into a fixed typed array. Output buffers belong entirely to the worker and are transferred directly back, avoiding an additional full-payload copy. The client still clones its input into the worker, preserving the original buffer for retry/fallback. These changes affect preparation cost, not the wire format, sample positions or compression thresholds. [Browser measurements](benchmarks/2026-10-18-browser-upload.md) record the evaluated variants and limits; they do not establish peak-memory or end-to-end transfer gains.
+
 Node codec decoders cap output and reject trailing streams; Zstandard additionally caps its advertised history window at 16 MiB. Brotli large-window mode is not enabled. Portable frames do not accept arbitrary codec identifiers or external dictionaries. Authentication comes from GCM/manifests in storage; exported checksums are integrity checks, not cryptographic sender authentication.
 
 ## STC1 container
@@ -48,3 +50,21 @@ Create the ignored output/input directories first. Operator corpus files are rea
 WAN models 10 Mbit/s up / 50 Mbit/s down / 80 ms latency; LAN models 1 Gbit/s / 2 ms. The shared application-stream shaper is not a TCP congestion model. Counts cover file-chunk/attachment body bytes, excluding API metadata and HTTP/TCP/TLS overhead. Its client uses Node gzip level 1, not browser CPU measurements. Actual browser functionality, gzip/custom-worker behavior and native downloaded originals/archives are tested separately. Verify on target devices/networks before making deployment speed commitments.
 
 Final v0.6.0 [per-file ratios, WAN/LAN timing ranges, concurrent/resumed results and default decision](benchmarks/2026-10-18-summary.md): 5/8 nonempty synthetic fixtures meet the 75% target using the best tested setting. Custom STP1 meets it on the specialized probe, not the general set. LAN/tiny-file regressions keep legacy defaults in place.
+
+### Native browser preparation
+
+After installing dependencies and Chromium as described in the [README](../README.md#development):
+
+```bash
+mkdir -p exports
+node scripts/benchmark-browser.cjs --revision working-tree --repetitions 5 > exports/browser-upload.json
+node scripts/benchmark-browser.cjs --revision working-tree --input benchmark-input --modes none,adaptive,smallest,research > exports/customer-browser-upload.json
+```
+
+The harness serves the actual client, upload worker and codec core on a temporary loopback server and records their SHA-256 hashes, revision label, Chromium version and host details. Use `--app-root PATH` for an alternate source tree and `--file NAME` for one fixture. Repetitions are bounded to 1–20. A warmup is recorded separately for each fixture/mode, followed by individual timed samples and median/min/max. The default nine synthetic fixtures retain their original holdout labels; separate synthetic 8 MiB text/random and 16 MiB random workloads exercise chunk sizes and are excluded from general codec ratio scoring.
+
+`--input` reads a shallow local directory without modifying its files. Inputs must be regular files, at most 16 MiB each, at most 64 files and at most 128 MiB total; symlinks and special files are rejected and subdirectories skipped. Reports include names, sizes and hashes, so keep customer reports private. They do not embed file contents. Only project-generated synthetic results belong in the repository.
+
+`prepareMs` includes client/worker messaging and input cloning; `workerMs` measures the worker's hashing/encoding/selection before its final output handoff. Fixture loading, checking the caller's original buffer and server decoding are outside the timed region. Every warmup and sample must produce a native worker response and pass exact-byte/hash verification through the production transport decoder. Empty files prepare an empty raw body but send no upload chunk in the application. A hidden client fallback, worker error or invalid payload fails the run instead of being recorded as fast encoding.
+
+This measures local browser preparation, not upload/download throughput, full archive size, scanner/storage performance, concurrent requests, peak memory or target-device acceptance. Run benchmarks sequentially on an otherwise idle target device and retain misses/ranges. The [recorded comparison](benchmarks/2026-10-18-browser-upload.md) includes the screening runs and a repeated baseline/candidate pair. Legacy quick-send defaults and the earlier LAN/tiny-file gate remain unchanged. To roll back only the optimization, restore the sampling block and final `wireBytes.slice().buffer` in `public/upload-compression-worker.js` from `b5fe6bb`, then rerun `npm run test:ui` and the benchmark.

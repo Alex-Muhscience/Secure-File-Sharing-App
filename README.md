@@ -94,13 +94,13 @@ npx playwright install chromium
 | JavaScript syntax                                                  | `npm run check`                                                                                                                |
 | Tracked-file secret check                                          | `npm run check:secrets`                                                                                                        |
 | Unit tests                                                         | `npm test`                                                                                                                     |
-| UI, accessibility, refresh/expiry and workspace/action race checks | `npm run test:ui`                                                                                                              |
+| UI, accessibility, refresh/expiry, workspace races and native upload-worker checks | `npm run test:ui`                                                                                                              |
 | MongoDB and real Garage S3 integration suites                      | Use the private-network commands in the [verification runbook](docs/OPERATIONS.md#verification).                               |
 | Browser workflows against the running filesystem stack             | `BROWSER_STORAGE=filesystem npm run test:browser`                                                                              |
 | Browser workflows against the running S3 stack                     | `BROWSER_STORAGE=s3 npm run test:browser`                                                                                      |
-| Codec comparisons and transfer benchmarks                          | Commands and measurement boundaries in [compression evidence and reproduction](docs/COMPRESSION.md#evidence-and-reproduction). |
+| Codec comparisons, transfer and native browser preparation benchmarks | Commands and measurement boundaries in [compression evidence and reproduction](docs/COMPRESSION.md#evidence-and-reproduction). |
 
-Integration suites use isolated temporary databases and object prefixes. Packaged browser tests need the real app, MongoDB, scanner and Mailpit; rebuild the images after server changes so the tests exercise the changed code. The UI/race suites use controlled API fixtures and explicit clock control for manual/background refresh and expiry. Browser output and local benchmark inputs stay ignored.
+Integration suites use isolated temporary databases and object prefixes. Packaged browser tests need the real app, MongoDB, scanner and Mailpit; rebuild the images after server changes so the tests exercise the changed code. The UI/race suites use controlled API fixtures and explicit clock control for manual/background refresh and expiry. The native upload-worker suite uses real Chromium workers and the server transport decoder on a temporary loopback server. Browser output and local benchmark inputs stay ignored.
 
 Use a branch and pull request, update the document that owns each changed fact, and ask the repository owner before merging. Commit messages contain no assistant attribution. GitHub automatically deletes source branches after an approved merge; update and verify local `main`, then remove the corresponding merged local branch.
 
@@ -110,7 +110,7 @@ Every pull request and push to `main` runs [Transfer checks](.github/workflows/n
 
 - syntax, tracked-secret and production-dependency audit checks
 - unit and MongoDB integration suites
-- Chromium UI, accessibility, layout and race checks
+- Chromium UI, accessibility, layout, race and native upload-worker integrity checks
 - the packaged filesystem stack, real scanner/email smoke tests and browser transfer/compression/restore workflows
 - the private Garage S3 stack, integration and browser workflows against it
 - encrypted backup verification for both storage configurations

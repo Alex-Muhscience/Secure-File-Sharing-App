@@ -86,7 +86,7 @@ Payment configuration defaults off. [Billing operations](BILLING.md) describes t
 
 The native-download handoff sets a file-only HttpOnly cookie, expiring with the transfer, so the browser can resume beyond the one-hour app session. Explicit logout revokes associated grants. Download links still recheck revocation, current roles and billing access. These credentials are never archived. Audit exports accept UUID and deterministic event IDs, with bounded cursor pagination. Gross recorded payment totals exclude test data, but do not reconcile refunds, disputes or fees.
 
-For release verification, run both UI suites plus all Mongo-backed suites; set `TEST_S3=true` for real Garage tests. S3 coverage now includes segmented migration, key rotation and restore to both backends. The published 1 GiB benchmark uses a byte-counting inspection fixture, not ClamAV. Do not treat its throughput as malware-scanning capacity or its ratio as typical.
+For release verification, run `npm run test:ui` plus all Mongo-backed suites; set `TEST_S3=true` for real Garage tests. S3 coverage now includes segmented migration, key rotation and restore to both backends. The published 1 GiB benchmark uses a byte-counting inspection fixture, not ClamAV. Do not treat its throughput as malware-scanning capacity or its ratio as typical.
 
 MongoDB's Compose and CI file-descriptor limit is explicitly 64,000, following [MongoDB resource-limit guidance](https://www.mongodb.com/docs/manual/reference/ulimit/). Repeated isolated restore/index-build tests exhausted a host-inherited 1,024-descriptor default and caused a local database restart; do not inherit that low limit for a growing metadata set. Recreate the container to apply changed limits while preserving the database volume. Check `docker compose ... exec -T mongo sh -c 'ulimit -n'`. Test runs have bounded timeouts and close HTTP fixtures during teardown so an interrupted dependency does not leave a failed test process running indefinitely.
 
@@ -113,7 +113,7 @@ npx playwright install chromium
 npm run test:ui
 ```
 
-On Linux, Chromium also needs its system dependencies; the CI runner uses `npx playwright install --with-deps chromium`. The UI/race suites use controlled API fixtures. Packaged browser tests need the real app, scanner, database and Mailpit running.
+On Linux, Chromium also needs its system dependencies; the CI runner uses `npx playwright install --with-deps chromium`. `test:ui` runs the UI/race suites with controlled API fixtures, then a native upload-worker suite using a temporary loopback server and real transport decoding. The latter checks caller-buffer preservation, raw/gzip/STP1 integrity, boundary sizes and rejection of deliberate corruption/worker failure; it does not require the pilot services. Packaged browser tests need the real app, scanner, database and Mailpit running.
 
 The UI fixture uses [Playwright's clock](https://playwright.dev/docs/clock), installed before application timers are created, to separate manual refresh/retry and session expiry from automatic polling. It pauses time and drains an in-flight refresh before manual transitions; separate checks advance time to verify automatic recovery and background expiry. Normal timers resume for the other workflows. Keep both paths covered when changing the fixture; a real delay, force click or test rerun does not resolve this ordering dependency. The application still polls normally every five seconds.
 

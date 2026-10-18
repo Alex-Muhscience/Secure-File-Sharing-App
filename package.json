@@ -12,7 +12,7 @@
     "check": "node scripts/check.cjs",
     "test:browser": "node test/browser.js && node test/compression-browser.js",
     "check:secrets": "node scripts/check-secrets.cjs",
-    "test:ui": "node test/ui-browser.js && node test/ui-races.js",
+    "test:ui": "node test/ui-browser.js && node test/ui-races.js && node test/upload-browser.js",
     "format:ui": "prettier --write \"public/*.{html,css,js}\" test/browser.js test/ui-browser.js"
   },
   "engines": {
