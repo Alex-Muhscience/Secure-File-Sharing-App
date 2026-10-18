@@ -115,6 +115,8 @@ npm run test:ui
 
 On Linux, Chromium also needs its system dependencies; the CI runner uses `npx playwright install --with-deps chromium`. The UI/race suites use controlled API fixtures. Packaged browser tests need the real app, scanner, database and Mailpit running.
 
+The UI fixture uses [Playwright's clock](https://playwright.dev/docs/clock), installed before application timers are created, to separate manual refresh/retry and session expiry from automatic polling. It pauses time and drains an in-flight refresh before manual transitions; separate checks advance time to verify automatic recovery and background expiry. Normal timers resume for the other workflows. Keep both paths covered when changing the fixture; a real delay, force click or test rerun does not resolve this ordering dependency. The application still polls normally every five seconds.
+
 Rebuild application/worker images after changing server source, so a container test does not accidentally exercise an old image. With the filesystem stack running, use its private MongoDB rather than assuming a host port exists:
 
 ```bash

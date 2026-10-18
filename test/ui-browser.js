@@ -109,6 +109,7 @@ async function main() {
       uploadMode = "failure",
       releaseUpload,
       failFiles = false,
+      fileRequests = 0,
       expired = false,
       holdPersonal = false,
       releasePersonal,
@@ -317,6 +318,7 @@ async function main() {
               fileCount: 1,
             });
       if (endpoint === "/api/files") {
+        fileRequests++;
         if (failFiles)
           return send(
             { error: "Temporary service interruption. Try again." },
@@ -364,6 +366,8 @@ async function main() {
       if (endpoint === "/api/logout") return send({ success: true });
       return send({ error: "Unexpected test request" }, 404);
     });
+    // Install before application timers are created; pause only for refresh checks.
+    await page.clock.install();
     await page.goto(base + "/#billing");
     await page.locator("#email").fill(email);
     await page.locator("#request-form button[type=submit]").click();
@@ -559,15 +563,69 @@ async function main() {
     );
     await page.keyboard.press("Escape");
     await page.locator("#transfer-dialog").waitFor({ state: "hidden" });
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    // Finish any refresh that began before the clock stopped.
+    await page.evaluate(() => refreshTask?.promise);
     failFiles = true;
     await page.locator("#refresh").click();
     await page.locator("#refresh-error").waitFor({ state: "visible" });
     assert.ok(
       (await page.locator("#files").textContent()).includes(first.name),
     );
+    const retainedListing = await page.locator("#files").textContent(),
+      beforeFailedRetry = fileRequests;
+    await page.locator("#retry-refresh").click();
+    await page.locator('#retry-refresh:not([aria-busy="true"])').waitFor();
+    assert.equal(fileRequests, beforeFailedRetry + 1);
+    assert.equal(
+      await page.locator("#refresh-error").isVisible(),
+      true,
+      "A failed retry preserves the error and releases its control",
+    );
+    assert.equal(
+      await page.locator("#files").textContent(),
+      retainedListing,
+      "A failed retry retains the last file listing",
+    );
+    // The outage can last across several background update intervals.
+    const beforeBackgroundFailures = fileRequests;
+    await page.clock.runFor(15000);
+    await page.evaluate(() => refreshTask?.promise);
+    assert.ok(fileRequests > beforeBackgroundFailures);
+    assert.equal(await page.locator("#retry-refresh").isVisible(), true);
+    assert.equal(
+      await page.locator("#files").textContent(),
+      retainedListing,
+      "Background failures retain the last file listing",
+    );
+    const beforeRetry = fileRequests;
     failFiles = false;
     await page.locator("#retry-refresh").click();
-    await page.locator("#refresh-error").waitFor({ state: "hidden" });
+    await page
+      .locator("#refresh-error")
+      .waitFor({ state: "hidden", timeout: 2000 });
+    assert.equal(
+      fileRequests,
+      beforeRetry + 1,
+      "Manual retry requests a fresh listing while background time is paused",
+    );
+
+    // Automatic recovery must also work without clicking Retry.
+    failFiles = true;
+    await page.locator("#refresh").click();
+    await page.locator("#refresh-error").waitFor({ state: "visible" });
+    const beforeBackground = fileRequests;
+    failFiles = false;
+    await page.clock.runFor(5000);
+    await page
+      .locator("#refresh-error")
+      .waitFor({ state: "hidden", timeout: 2000 });
+    assert.equal(
+      fileRequests,
+      beforeBackground + 1,
+      "The scheduled refresh recovers without a manual action",
+    );
+    await page.clock.resume();
     holdPersonal = true;
     await page.locator("#refresh").click();
     await personalRequest;
@@ -645,6 +703,8 @@ async function main() {
       JSON.stringify(axe.violations, null, 2),
     );
     assert.deepEqual(axe.violations, []);
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    await page.evaluate(() => refreshTask?.promise);
     expired = true;
     await page.locator("#refresh").click();
     await page.locator("#signin").waitFor({ state: "visible" });
@@ -656,6 +716,7 @@ async function main() {
         .evaluate((element) => document.activeElement === element),
       true,
     );
+    await page.clock.resume();
     expired = false;
     resumableMode = true;
     await page.reload();
@@ -707,9 +768,24 @@ async function main() {
       await page.locator("#share-link").inputValue(),
       `${base}/?transfer=${first._id}`,
     );
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    await page.evaluate(() => refreshTask?.promise);
+    expired = true;
+    await page.clock.runFor(5000);
+    await page.locator("#signin").waitFor({ state: "visible", timeout: 2000 });
+    assert.equal(
+      await page.locator("#files").textContent(),
+      "",
+      "Background expiry clears the previous client's file listing",
+    );
+    assert.equal(
+      await page.locator("#share-link").inputValue(),
+      "",
+      "Background expiry clears the previous client's share link",
+    );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: sign-in errors, form preservation, server limits, upload failure/cancellation, clipboard fallback, refresh retry, workspace race, 200% text, reduced motion, session expiry and accessibility",
+      "PASS: sign-in errors, form preservation, server limits, upload failure/cancellation, clipboard fallback, failed/manual refresh retry, automatic refresh recovery, workspace race, 200% text, reduced motion, manual/background session expiry and accessibility",
     );
   } finally {
     await browser.close();
