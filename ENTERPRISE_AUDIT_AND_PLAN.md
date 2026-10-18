@@ -1,16 +1,18 @@
 # Secure File Transfer — development audit and delivery plan
 
-**Historical audit:** the findings below describe the original checkout before implementation. A functional local backend and transfer workflow have since been built. Use [README.md](README.md) for the current runbook and [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for completed work and outstanding release gates. The original audit evidence is retained below.
+> **Archived baseline — 2026-10-14, before the current application was built.** Reconciled on 2026-10-18: v0.6.0 is a working local pilot merged through PR #8. Missing-service, tracked-dependency, vulnerability-count and preview-only findings below describe the original checkout, not current `main`. They are retained as historical evidence, not present-tense status or current operating instructions.
+>
+> Start with [README](README.md), use [delivery status](docs/DELIVERY_STATUS.md) for what is built/remaining, and [implementation](docs/IMPLEMENTATION.md) for current code/history. Production acceptance is still outstanding, but it must be assessed from current evidence rather than this baseline.
 
 Audit date: 2026-10-14. Repository: `Secure-File-Sharing-App`. Baseline commit: `271fbd8`.
 
-## Executive decision
+## Historical executive decision (2026-10-14)
 
 **This checkout is an incomplete prototype, not a deployable secure-transfer product.** It contains a browser interface, Express bootstrap, authentication middleware, four Mongoose models, an older encryption utility, and deployment templates. The configuration, API routes, and core services referenced by the bootstrap are absent. No working transfer, enterprise security, performance, compliance, or revenue claim can be established from this code.
 
 The immediate objective should be a trustworthy, testable transfer workflow for a narrow customer segment. Enterprise expansion comes after functional restoration and paid customer validation. A million-dollar business is a commercial objective, not an outcome guaranteed by adding features.
 
-**Local deployment outcome:** an isolated Docker interface preview is available at `http://localhost:3080`. It explicitly disables transfers and email verification. The real backend remains blocked by missing source code. See the runbook below. Do not treat preview health as application readiness.
+**Historical local deployment outcome:** an isolated Docker interface preview is available at `http://localhost:3080`. It explicitly disables transfers and email verification. The real backend remains blocked by missing source code. See the runbook below. Do not treat preview health as application readiness.
 
 ## Scope and evidence quality
 

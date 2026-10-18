@@ -1,37 +1,79 @@
-# Delivery status
+# Delivery status and remaining work
 
-Version: **v0.6.0 local enterprise/compression pilot**, following merged [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6) and [PR #7](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/7). The custom compression and industry workflows are tracked in [PR #8](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/8), which requires its own owner merge decision. Repository delivery and external production acceptance are separate.
+As of **2026-10-18**, the product version is **v0.6.0**. The working application, enterprise screens and industry-compression workflows are on `main`; [PR #8](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/8) was merged with owner approval at `9cfbeaf`. The release tag points to reviewed source `24d8521`, which is included in that merge. The [merge CI run](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/actions/runs/39072849467) passed.
 
-| Capability | Repository implementation | Remaining external acceptance |
+**Delivery stage: local pilot.** Core workflows are implemented and exercised automatically. Production operation, real merchant acceptance, representative client usability and actual terabyte capacity are not accepted. There is no meaningful single “percent complete”: those are separate outcomes.
+
+This document owns current readiness and remaining priorities. [README](../README.md) introduces the product; [implementation](IMPLEMENTATION.md) maps the code and release history; [operations](OPERATIONS.md) owns procedures. Historical plans are not the live backlog.
+
+## What has been built
+
+“Implemented” means code exists and has repository evidence. The final column identifies what still prevents broader claims or rollout.
+
+| Area | Implemented and exercised | Remaining work or acceptance |
 | --- | --- | --- |
-| Client experience | Compact category/file/options/review screens for compress/download/send, separate restore path, six file categories and industry guidance, original quick-send, search/filter, progress/pause/resume, local assets and keyboard/axe/reflow checks | Representative client usability, branding, other browsers and human accessibility review |
-| Enterprise administration | Explicit operator allowlist, client search/pagination, guarded manual plans, independent access suspension, audit reasons, aggregate analytics. Local admin@secure-transfer.localhost is enabled and OTP-verified | Choose a production operator identity and real email delivery |
-| Client dashboards | Real 7/30/90-day usage, separate original download/archive-export counters, storage compression savings, chart/table, plan limits, actual invoices/orders and provider status | Retention/reporting requirements with real clients |
-| Payments | Stripe recurring/prepaid, M-Pesa prepaid, optional configurable BitPay crypto adapter, consent/quotes, signature/authenticated verification, idempotency, current-state reconciliation | Choose currency/prices/accounts; merchant sandbox acceptance; ambiguous-order resolution runbook, refunds/disputes/accounting and support ownership. Checkout remains off |
-| File pipeline | Browser-worker chunk compression, bounded authenticated Brotli/Zstandard/custom STP1 parts, resumable logical offsets, native original ranges, explicit archive exports with representation-bound grants | Actual 1–5 TB interruption/load/recovery trials on provisioned infrastructure |
-| Compression research | Independent predictive/bit-packed codec and STC1 container, gzip interoperability, exact inspected/offline restore, reproducible comparisons including all misses. Custom probe achieved 86.96% reduction | A universal 75% lossless guarantee is impossible. Representative real industry corpus, broad competitor research and target-device/network acceptance remain unvalidated |
-| Inspection | Streamed ClamAV and full-byte HTTPS inspector contract, fail-closed quarantine, retries/leases/heartbeats | A proven terabyte-capable inspector; default acceptance stays 10 MiB |
-| Recovery | Streaming STBK2 secretstream snapshots, legacy STBK1 compatibility, filesystem/S3 restore, verified migration/reversal, root/chunk/session key rewrapping | Production offsite retention, restore/rollback drills, key-service and storage redundancy |
-| Operational security | Current tenant/role/subscription checks, opaque hashed sessions, per-part AEAD, CSP, ignored secrets/runtime artifacts, private local services and CI gates | Provider credential rotation for historical exposure, managed KMS/HSM, authenticated HTTPS infrastructure, independent security review; SSO/SCIM as contracted |
+| Identity and access | Email OTP, hashed expiring sessions, workspace/recipient authorization, role checks, revocation and scoped native-download grants | Production email/HTTPS, identity policy and independent security review; SSO/SCIM are not implemented |
+| Client experience | Compact navy/scarlet/white screens, quick send, compress/download, compress/send, STC restore, six categories, search/filter, progress/pause/resume, keyboard/reflow/axe checks | Real client usability, human accessibility review, other browsers and final branding |
+| Workspaces and quotas | Personal/team workspaces, owner/admin/member/viewer roles, atomic original-byte/file/seat reservations and cleanup | Representative organization/retention requirements and production policy validation |
+| Client dashboards | Owner/admin 7/30/90-day usage, storage, original downloads, archive exports, plan limits and actual order/payment records | Customer reporting/retention requirements; billing totals are not complete accounting |
+| Platform administration | Explicit server-side email allowlist, client search/pagination, guarded manual subscriptions, separate access suspension, audit reasons and aggregate analytics | Production operator identity and operating procedures; domain ownership alone never grants admin rights |
+| File pipeline | Browser-worker wire compression, resumable logical offsets, encrypted bounded parts, manifest integrity, quarantine, native originals/ranges and guarded exports | Actual 1–5 TB interruption, inspection, load and recovery trials on provisioned infrastructure |
+| Compression and restore | Independent STP1 predictor/block packer, Brotli/Zstandard comparison, STC1/gzip export, exact offline/server restore and scanner-outage recovery | Broad codec research and representative corpus/device/network work; published ratio/speed gates have misses |
+| Inspection | Real ClamAV clean/EICAR flows, fail-closed quarantine, retry/lease renewal and an external full-byte HTTPS inspector contract | A proven inspector at the target file sizes; the HTTP contract is not a bundled terabyte scanning service |
+| Payments | Stripe recurring/prepaid, M-Pesa prepaid, optional BitPay prepaid, consent/quotes, authenticated verification, idempotency and reconciliation | Accounts, prices/currency, merchant sandbox acceptance, operational order repair, refunds/disputes/fees/tax/accounting work; checkout remains off |
+| Recovery and storage | Filesystem/private Garage S3, migration/reversal, encrypted STBK2 snapshots, STBK1 reads, isolated restore and root/part/session key rewrapping | Managed redundant infrastructure, offsite retention, production drills, monitoring and key-service deployment |
 
-## Evidence and limits
+The working app is not the old interface-only preview. It also is not a generic ZIP/RAR extractor, image optimizer, media transcoder, end-to-end encrypted messenger or complete financial-accounting system. Industry labels provide guidance and byte-preserving processing; they do not establish industry-specific certification.
 
-Automated tests exercise current tenant/platform boundaries; quota races; tampering and missing/reordered chunks; retry/process replacement; upload completion recovery; native ranges and logout revocation; worker maintenance during a held scan; provider receipt replay; duplicate/out-of-order events and older Stripe invoices; bounded inspector failures; old/new archives; real Garage migration/reversal, key rotation and restore to both backends. Official Stripe SDK traffic is exercised against controlled HTTP fixtures. No real merchant account has been configured or charged.
+## Current limits and known gaps
 
-UI checks cover empty/loading/error states, role-based navigation, checkout consent, one-step screens, long labels, narrow layouts, enlarged text, reduced motion and automated axe rules. Real packaged flows exercise Mailpit, ClamAV/EICAR, filesystem/private S3, recipient download, memberships, activity export and revocation. New tests cover every codec's exact restoration, malformed/oversized streams, private no-mail jobs, native representation isolation, scanner-failed recovery, cancellation/quota release and offline no-overwrite publication. Actual custom-coded encrypted parts survive filesystem/S3 migration, key rotation and backup recovery. These are engineering checks, not proof of universal usability, certification or production readiness. Current release evidence and exact remote run results are linked from PR #8; v0.5.0's historical counts are not v0.6.0 validation results.
+| Topic | Current boundary |
+| --- | --- |
+| Accepted file size | Default **10 MiB**, constrained by upload/scanner limits and available workspace quota |
+| Large-file target | Requested 1–5 TB; configuration ceiling **5 TiB**, not an actual-size validation result |
+| Included scanner | Local ClamAV stream cap **25 MiB**; changing only `MAX_FILE_SIZE` is insufficient |
+| Compression target | At least 75% complete-archive reduction per eligible file; no universal lossless guarantee |
+| General corpus result | Best tested settings meet the target on **5/8 nonempty synthetic fixtures**; one empty fixture is N/A |
+| Custom codec result | STP1 meets the target on **0/8** general nonempty fixtures; **86.9637%** reduction on the separate correlated-data probe |
+| Transfer speed | WAN benefits on declared compressible fixtures; tiny-file/concurrent-LAN regressions exceed the 5% gate, so legacy defaults remain |
+| Evidence coverage | Synthetic files, local application-stream shaping and Chromium; no representative customer corpus, browser-CPU benchmark or real internet congestion test |
+| Encryption boundary | Server-managed AES-GCM/keyed manifests for storage; downloaded STC/gzip archives are unencrypted |
+| Live billing | Off by default; no merchant account, commercial price or live settlement has been accepted |
+| Email/admin | New clones use local Mailpit and an empty admin allowlist; this workspace separately enables `admin@secure-transfer.localhost` |
+| Infrastructure | Single-instance local services; no bundled production redundancy, managed KMS/HSM or immutable external audit service |
+| Test reliability | The existing refresh-retry UI fixture can race the normal five-second background refresh and lose its retry button; deterministic fixture synchronization remains maintenance work |
 
-The [1 GiB synthetic fixture](benchmarks/2026-10-17-one-gib.json) reduced stored bytes by **74.975%**, peaked at **180.4 MiB process RSS** and downloaded with matching SHA-256. It deliberately contained 75% repeated bytes and used a byte-counting scanner. It does not establish a typical ratio, comparative world ranking, actual terabyte capacity or inspection throughput. Random/compressed content may not shrink. Config supports up to 5 TiB, but the included local scanner/deployment does not validate that scale.
+Original logical bytes, encrypted storage bytes, complete archive bytes and transferred HTTP-body bytes are different measurements. Storage savings or the earlier 1 GiB counting-scanner run cannot prove archive reduction, malware inspection throughput or terabyte capacity. Read the [full measurement tables and method](benchmarks/2026-10-18-summary.md), [compression reference](COMPRESSION.md) and [large-file evidence](LARGE_FILES.md).
 
-The [v0.6.0 codec comparison](benchmarks/2026-10-17-codec-comparison.json) counts full archive overhead. Its separate correlated-data probe favors STP1; its general synthetic fixtures often favor established codecs and retain target misses/size increases. Controlled HTTP transfer experiments use real ClamAV with application-stream WAN/LAN shaping, count file-body bytes only, and do not measure browser CPU or real internet congestion. Production speed claims require target-network/device trials. [Compression formats and reproduction](COMPRESSION.md) records the methods and limits.
+## What remains, in priority order
 
-## Operational boundaries
+These are readiness priorities, not promised delivery dates or accepted customer requirements. Engineering owns code changes; operators provide infrastructure/accounts; the product owner makes commercial and acceptance decisions.
 
-Server-managed encryption permits authorized server operators to decrypt. Local MongoDB is unauthenticated on a private Docker network. Filesystem and local Garage storage are single-instance, without replica redundancy. Audit history is tenant-scoped, not externally immutable. Notifications are at least once. Native download grants can outlive app sign-in until transfer expiry and remain subject to current access checks/logout revocation. Download analytics count authorized requests/ranges rather than completed receipt. Platform payment totals are gross recorded payments, excluding tests, without fee/refund/dispute accounting.
+| Priority | Work | Type | Evidence needed to close it |
+| --- | --- | --- | --- |
+| 1 | Establish representative real files across the six categories and improve the ratio/speed tradeoffs, including reported LAN/tiny-file regressions | Engineering + client validation | Authorized corpus with hashes/rights, exact restore, full-artifact ratios, repeated WAN/LAN/concurrent/resume results and target-device/browser measurements; disclose every miss |
+| 2 | Provision and validate the intended large-file service | Engineering + infrastructure | Actual-size 1–5 TB transfer/inspection tests, agreed quotas, interruption/restart, resource bounds, backup/restore, migration and key-rotation drills; a capable full-byte inspector |
+| 3 | Harden and operate a production deployment | Engineering + operations | Rotated previously exposed provider credentials, HTTPS, authenticated database/storage, managed key custody, redundancy, offsite retention, alerting, rollback drills and independent security review |
+| 4 | Configure and accept real payment providers | Merchant setup + engineering | Chosen prices/currency/accounts, sandbox renewals/cancellation/receipts, failure/replay tests and a reviewed ambiguous-order repair procedure |
+| 5 | Finish payment operations beyond entitlement grants | Engineering + business operations | Agreed refund/dispute/fee/tax/accounting scope, implemented tools or documented provider-owned process, reconciliation and support ownership |
+| 6 | Accept the client experience and product identity | Product + client validation | Final branding/domain/operator email, source-licensing/commercial terms, real email delivery, representative client tasks, human accessibility review and supported-browser/download-manager acceptance |
+| 7 | Agree additional enterprise contracts | Product + engineering | Decide whether SSO/SCIM, regional residency/redundancy and external immutable audit retention are required; implement and verify the agreed scope |
 
-Historical exposed credentials require provider rotation; Git history was not rewritten. The CBC prototype is not migrated automatically. Existing storage copies need their original backend until deletion. Source license ownership, customer validation, external security/commercial review, production recovery/load results, real email, monitoring/support ownership and procurement acceptance remain launch gates. No certification, SLO, revenue outcome, guaranteed compression ratio or 5 TB production validation is claimed.
+The 75% and speed acceptance gaps remain open research/engineering work. Merchant configuration and production infrastructure are not substitutes for those gaps. Increasing a configuration number, selecting an industry, enabling a provider flag or passing fixture tests does not close the corresponding acceptance item.
 
-## Release process
+Test-maintenance follow-up: [documentation PR #9](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/9) exposed a refresh-retry fixture race in [ui-browser.js](../test/ui-browser.js). The test enables successful file responses before clicking Retry; normal background recovery can hide the button first. A temporary delayed test copy confirmed that sequence, while the unchanged local UI suite passed. Synchronize the fixture with the actual retry action and retain separate background-recovery coverage. Record CI reruns; a rerun alone does not fix this timing dependency.
 
-Keep user skill-installation files outside the application commits. Stage reviewed paths only, preserve ignored keys/data/backups, publish the feature branch and PR checks, then tag the verified release commit. **Merge to main requires explicit owner approval for PR #8.** Approving its design/implementation does not approve a main merge. See [operations](OPERATIONS.md), [billing](BILLING.md), [large files](LARGE_FILES.md), and the [implementation plan](superpowers/plans/2026-10-17-industry-compression.md).
+## Evidence already available
 
-Final v0.6.0 [per-file ratios, WAN/LAN timing ranges, concurrent/resumed results and default decision](benchmarks/2026-10-18-summary.md): 5/8 nonempty synthetic fixtures meet the 75% target using the best tested setting. Custom STP1 meets it on the specialized probe, not the general set. LAN/tiny-file regressions keep legacy defaults in place.
+- v0.6.0: **26 unit cases and 24 integration cases**, plus UI/accessibility/race suites and packaged filesystem/S3 browser, Mailpit and ClamAV workflows. [Reviewed-head CI](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/actions/runs/39072235453) and [merged-main CI](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/actions/runs/39072849467) passed. These are release-specific counts, not automatically updated totals.
+- Tests cover tenant/platform boundaries, quota races, malformed/oversized archives, custom-codec integrity, immutable retries, internal restore-stage isolation, recipient gzip selection, native revocation, payment ordering, scanner outage/retry and cancellation cleanup. Real custom-coded parts survived S3 migration, key rotation and encrypted recovery to both backends.
+- A fresh branch review found three Important issues; all were reproduced and fixed. No minor findings were deferred. [The release review](RELEASE_V060.md) records the fixes, choices and their costs.
+- [Benchmark summary](benchmarks/2026-10-18-summary.md) links every general-fixture outcome, the specialized custom-codec probe, timing ranges and concurrent/resumed comparisons. No customer success, certification, SLA, production revenue or universal codec superiority is established by these checks.
+
+## Scope and maintenance rules
+
+Keep the local pilot defaults until a separately reviewed change and its evidence justify promotion. Live checkout remains off until accounts, catalog terms and acceptance exist. Do not bypass quarantine, invent savings, erase difficult fixtures or treat an admin access pause as cancellation of provider charges.
+
+Legacy `middleware/`, `models/`, `utils.js`, root `tokens.css` and `docker-compose.yml` are retained historical artifacts, not the active runtime or deployment guide. The port-3080 preview is separate from the working port-3081 app. Their presence does not mean those old paths need to be wired back in. Any cleanup/migration is a separate reviewed change.
+
+For each future change, update current capability/remaining-work claims here, source/architecture navigation in [implementation](IMPLEMENTATION.md), procedures in [operations](OPERATIONS.md), and format/payment contracts in their dedicated documents. Record historical milestones in the [release history](IMPLEMENTATION.md#release-history-and-evidence); do not reuse an old plan as the current readiness dashboard. New pull requests require their own owner merge approval; approval of PR #8 has already been fulfilled.

@@ -1,5 +1,7 @@
 # v0.5.0 release review and decisions
 
+> **Historical release evidence.** Reconciled on 2026-10-18: the enterprise foundation and corrections were merged through [PR #6](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/6) and [PR #7](https://github.com/Alex-Muhscience/Secure-File-Sharing-App/pull/7). Counts and review observations below belong to v0.5.0. Current capabilities/remaining work are in [delivery status](DELIVERY_STATUS.md); v0.6.0 has a [separate review record](RELEASE_V060.md).
+
 A fresh whole-branch review examined `cc87ad9..e6c380d` against the interface specification, enterprise implementation plan, and documented local-pilot boundaries. It found five Important issues and one initially Minor issue. The executor treated stale action effects as Important because they can affect another workspace and block a reused control. All six entered one regression-tested correction pass; no findings were deferred.
 
 | Finding | Correction | Regression evidence |
@@ -24,4 +26,4 @@ The full local suite after correction includes 10 core tests, 17 integration tes
 - Sampled file fingerprints remain a selection hint during resume, requiring the unmodified original. Chunk checksums protect transmission, but the cost is no full local-file identity proof when a user deliberately or accidentally changes a same-metadata middle segment.
 - Non-Chromium download managers and human usability/accessibility are not validated by the current automated evidence. Chromium/reflow/axe/visual checks passed; the cost is additional client/browser acceptance before broad rollout.
 
-No merge to main is authorized by these checks. The enterprise foundation was already merged through PR #6. The repository owner must approve the correction PR #7 separately.
+At review time, these checks did not authorize a main merge: PR #7 required its own owner decision after PR #6. That approval was subsequently given and PR #7 merged at `e8cf65e`. This historical approval does not authorize later pull requests.

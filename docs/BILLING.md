@@ -1,5 +1,7 @@
 # Billing configuration and operations
 
+Current v0.6.0 interface/operations reference. Provider integration code and controlled-fixture tests are implemented; real merchant-account acceptance and live settlement are not. [Delivery status](DELIVERY_STATUS.md) owns the outstanding setup, engineering and business-operation work.
+
 Checkout defaults to `BILLING_MODE=off`, with an empty catalog. The app never invents commercial prices or activates a merchant account. The local Compose entitlement simulator is labeled separately and cannot override paid subscriptions or an operator suspension.
 
 ## Catalog
