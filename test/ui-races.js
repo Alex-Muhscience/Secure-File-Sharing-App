@@ -6,8 +6,9 @@ const deferred = () => { let resolve; const promise = new Promise(done => { reso
 async function main() {
   const app = express(); app.use(express.static(path.join(__dirname, '../public')));
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
-  const browser = await chromium.launch({ headless: true });
+  let browser;
   try {
+    browser = await chromium.launch({ headless: true });
     const context = await browser.newContext(), page = await context.newPage();
     const oldVerification = deferred(), verifying = deferred(), exportGate = deferred(), exporting = deferred(), compressionGate = deferred(), inspectingCompression = deferred();
     const first = 'personal_fixture', second = 'workspace_fixture', email = 'new@example.com';
@@ -113,6 +114,6 @@ async function main() {
     await page.locator('#compression-result').waitFor({state:'visible'});
     assert.equal(await page.locator('#compression-format').inputValue(),'gzip','Reopened jobs retain the saved portable format');
     console.log('PASS: superseded sign-in cannot install an old identity; stale action failures cannot affect a newer workspace or reused control');
-  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
+  } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
