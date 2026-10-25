@@ -57,9 +57,10 @@ async function main() {
   app.use(express.static(path.join(__dirname, "../public")));
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
-  const base = `http://127.0.0.1:${server.address().port}`,
-    browser = await chromium.launch({ headless: true });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  let browser;
   try {
+    browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
       reducedMotion: "reduce",
@@ -788,7 +789,7 @@ async function main() {
       "PASS: sign-in errors, form preservation, server limits, upload failure/cancellation, clipboard fallback, failed/manual refresh retry, automatic refresh recovery, workspace race, 200% text, reduced motion, manual/background session expiry and accessibility",
     );
   } finally {
-    await browser.close();
+    await browser?.close();
     await new Promise((resolve) => server.close(resolve));
   }
 }
